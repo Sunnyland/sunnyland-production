@@ -2,6 +2,7 @@ import {prepareSamples,productionStaff,reviewer,queueSampleAlert,assignSample} f
 import {linkTicket, sampleContext} from './job-tickets.mjs';
 import {savePhysicalLot, stocktakeMonth} from './consignment.mjs';
 import {extraAction} from './inventory.mjs';
+import {prepareSync,markNewerVersions} from './state-sync.mjs';
 import {DatabaseSync} from 'node:sqlite';
 import {randomUUID,randomBytes,scryptSync,timingSafeEqual,createHash} from 'node:crypto';
 export class Fault extends Error {constructor(message,status=400){super(message);this.status=status;}}
@@ -32,10 +33,10 @@ export class Store {
  CREATE TABLE IF NOT EXISTS audit(id TEXT PRIMARY KEY,actor TEXT,kind TEXT,entity TEXT,at TEXT,detail TEXT);
  CREATE TABLE IF NOT EXISTS outbox(id TEXT PRIMARY KEY,channel TEXT,entity TEXT,body TEXT,state TEXT,receipt TEXT,created TEXT);
  CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user TEXT,expires INTEGER);
- CREATE TABLE IF NOT EXISTS failures(identity TEXT PRIMARY KEY,count INTEGER,until INTEGER);`);prepareSamples(this);}
+ CREATE TABLE IF NOT EXISTS failures(identity TEXT PRIMARY KEY,count INTEGER,until INTEGER);`);prepareSync(this);prepareSamples(this);}
  get(kind,id){const row=this.db.prepare('SELECT doc FROM records WHERE kind=? AND id=?').get(kind,id);return row?JSON.parse(row.doc):null;}
  all(kind){return this.db.prepare('SELECT doc FROM records WHERE kind=? ORDER BY rowid').all(kind).map(r=>JSON.parse(r.doc));}
- put(kind,record){this.db.prepare('INSERT INTO records VALUES (?,?,?) ON CONFLICT(kind,id) DO UPDATE SET doc=excluded.doc').run(kind,record.id,JSON.stringify(record));return record;}
+ put(kind,record){this.db.prepare('INSERT INTO records VALUES (?,?,?) ON CONFLICT(kind,id) DO UPDATE SET doc=excluded.doc').run(kind,record.id,JSON.stringify(record));this.syncTouch.run(kind,record.id);return record;}
  require(kind,id){const value=this.get(kind,id);need(value,`${kind} not found.`,404);return value;}
  audit(actor,kind,entity,detail){this.db.prepare('INSERT INTO audit VALUES (?,?,?,?,?,?)').run(randomUUID(),actor.id,kind,entity,stamp(),JSON.stringify(detail));}
  queue(channel,entity,body,id=randomUUID()){this.db.prepare('INSERT OR IGNORE INTO outbox VALUES (?,?,?,?,?,?,?)').run(id,channel,entity,JSON.stringify(body),'pending',null,stamp());return id;}
@@ -71,6 +72,7 @@ export class Store {
  }this.audit(actor,type,result.id,result);return result;});}
  cancelMail(entity){this.db.prepare("UPDATE outbox SET state='cancelled' WHERE entity=? AND channel='mail' AND state='pending'").run(entity);}
  reminders(intervalHours,now=Date.now()){need(Number.isFinite(intervalHours)&&intervalHours>=1,'Set a reminder interval of at least one hour.');let count=0;for(const s of this.all('sample').filter(s=>s.state==='pending')){const bucket=Math.floor((now-Date.parse(s.at))/(intervalHours*3600000));if(bucket<1)continue;const latest=this.db.prepare("SELECT created FROM outbox WHERE entity=? AND channel='mail' AND state IN ('pending','sending','uncertain')").get(s.id);if(latest)continue;this.queue('mail',s.id,{kind:'sample_reminder',to:this.require('user',s.rep).email,job:s.job,sample:s.id,title:s.title},`remind:${s.id}:${bucket}`);count++;}return count;}
- snapshot(actor){const registered=new Set(this.db.prepare('SELECT DISTINCT actor FROM push_devices').all().map(d=>d.actor));return {jobTicketsEnabled:true,stocktakeMonth:stocktakeMonth(),consignmentCounts:this.all('consignmentCount'),consignmentTransfers:this.all('consignmentTransfer'),consignmentOpenings:this.all('consignmentOpening'),user:actor,jobs:this.all('job'),stock:this.all('stock'),lots:this.all('lot'),operations:this.all('operation'),holds:this.all('hold'),issues:this.all('issue'),cutrules:this.all('cutrule'),samples:(productionStaff(actor)?this.all('sample'):[]).map(s=>({...s,newerVersionExists:this.all('sample').some(n=>n.family===s.family&&n.version>s.version)})),users:this.all('user').filter(u=>u.enabled).map(u=>({...this.publicUser(u),sampleAlertsRegistered:registered.has(u.id)})),asOf:stamp()};}
+ // The fields every state response carries. With lists:false only these are returned, for a changes-only response.
+ snapshot(actor,{lists=true}={}){const registered=new Set(this.db.prepare('SELECT DISTINCT actor FROM push_devices').all().map(d=>d.actor));const header={jobTicketsEnabled:true,stocktakeMonth:stocktakeMonth(),user:actor,users:this.all('user').filter(u=>u.enabled).map(u=>({...this.publicUser(u),sampleAlertsRegistered:registered.has(u.id)})),asOf:stamp()};if(!lists)return header;return {...header,consignmentCounts:this.all('consignmentCount'),consignmentTransfers:this.all('consignmentTransfer'),consignmentOpenings:this.all('consignmentOpening'),jobs:this.all('job'),stock:this.all('stock'),lots:this.all('lot'),operations:this.all('operation'),holds:this.all('hold'),issues:this.all('issue'),cutrules:this.all('cutrule'),samples:markNewerVersions(productionStaff(actor)?this.all('sample'):[])};}
  close(){this.db.close();}
 }

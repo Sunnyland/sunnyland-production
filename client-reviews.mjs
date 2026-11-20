@@ -124,11 +124,14 @@ function asset(res,name,mime,head) {
   const bytes=readFileSync(new URL('./review-web/'+name,import.meta.url));
   res.writeHead(200,{...safeHeaders,'Content-Type':mime,'Content-Length':bytes.length});res.end(head?undefined:bytes);
 }
-function serveMedia(req,res,media,mediaDir) {
+function serveMedia(req,res,media,mediaDir) { return streamMedia(req,res,media,mediaDir,safeHeaders); }
+
+/// Streams a stored photo or video from disk, honouring byte ranges so players can seek and start early.
+export function streamMedia(req,res,media,mediaDir,baseHeaders) {
   need(uuid.test(media.id) && types.has(media.mime),'Media unavailable.',404);
   const path=join(mediaDir,media.id), size=statSync(path).size;
   let start=0,end=size-1,code=200;
-  const headers={...safeHeaders,'Content-Type':media.mime,'Accept-Ranges':'bytes'};
+  const headers={...baseHeaders,'Content-Type':media.mime,'Accept-Ranges':'bytes'};
   if(req.headers.range) {
     const m=/^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
     if(m && (m[1]||m[2])) {

@@ -9,7 +9,8 @@ import {appleProvider,pushDevice,startSampleAlerts} from './sample-push.mjs';
 import {canReadJobs,searchJobs,readJob,jobVideos,receiveJobVideo,printIQReadError} from './job-documents.mjs';
 import {createJobsReader} from './printiq-application.mjs';
 import {resolveTicket} from './job-tickets.mjs';
-import {clientReviewSettings, staffReviews, publicReview} from './client-reviews.mjs';
+import {clientReviewSettings, staffReviews, publicReview, streamMedia} from './client-reviews.mjs';
+import {syncCursor,parseCursor,changedRecords,visibilityRows,markNewerVersions} from './state-sync.mjs';
 import http from 'node:http';
 import {PrintIQ} from './printiq.mjs';
 import {mkdirSync,readFileSync,writeFileSync,existsSync} from 'node:fs';
@@ -34,11 +35,33 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
  if(path==='/api/client-reviews') return await staffReviews({req,res,url,store,authorize:()=>store.auth(token),settings:reviews});
  if(req.method==='GET'){
  if(path==='/api/state'){
-   const snapshot=store.snapshot(actor),hidden=hiddenJobs(store);
-   snapshot.jobs=snapshot.jobs.filter(j=>!hidden(j.id,j.printiqId));
-   for(const field of ['samples','operations','holds','issues'])if(Array.isArray(snapshot[field]))
-     snapshot[field]=snapshot[field].filter(row=>!hidden(row.job,row.printiqId));
-   const pressMilestones=canReadJobs(actor)?press.statuses(snapshot.jobs.map(job=>job.id),{includeObserved:true}).filter(r=>!hidden(r.jobNo??r.id)):undefined;
+   // With ?since=<cursor> from an earlier response, only records changed since then are sent,
+   // plus the ids still visible in lists that can lose rows. An unknown cursor gets the full state.
+   const hidden=hiddenJobs(store),visible=row=>!hidden(row.job,row.printiqId);
+   const cursor=syncCursor(store),since=parseCursor(store,url.searchParams.get('since'));
+   let snapshot,jobIds;
+   if(since===null){
+     snapshot=store.snapshot(actor);
+     snapshot.jobs=snapshot.jobs.filter(j=>!hidden(j.id,j.printiqId));
+     for(const field of ['samples','operations','holds','issues'])if(Array.isArray(snapshot[field]))
+       snapshot[field]=snapshot[field].filter(visible);
+     jobIds=snapshot.jobs.map(job=>job.id);
+     snapshot.sync={cursor,delta:false};
+   }else{
+     snapshot={...store.snapshot(actor,{lists:false}),...changedRecords(store,since)};
+     const staff=productionStaff(actor);
+     // A new version changes newerVersionExists on the earlier ones, so whole families are sent.
+     const families=new Set(snapshot.samples.map(s=>s.family));
+     snapshot.samples=staff&&families.size?markNewerVersions(store.all('sample').filter(s=>families.has(s.family))):[];
+     snapshot.jobs=snapshot.jobs.filter(j=>!hidden(j.id,j.printiqId));
+     for(const field of ['samples','operations','holds','issues'])snapshot[field]=snapshot[field].filter(visible);
+     const visibleIds={};
+     for(const [kind,field] of [['job','jobs'],['sample','samples'],['operation','operations'],['hold','holds'],['issue','issues']])
+       visibleIds[field]=field==='samples'&&!staff?[]:visibilityRows(store,kind).filter(visible).map(r=>r.id);
+     jobIds=visibleIds.jobs;
+     snapshot.sync={cursor,delta:true,visibleIds};
+   }
+   const pressMilestones=canReadJobs(actor)?press.statuses(jobIds,{includeObserved:true}).filter(r=>!hidden(r.jobNo??r.id)):undefined;
    const printBookings=canReadJobs(actor)?store.all('printPlanRun').filter(r=>!r.removed && !hidden(r.job,r.printiqId)).map(({id,job,printiqId,day,press,part})=>({id,job,printiqId,day,press,part})):undefined;
    return send(200,{...snapshot,pressMilestones,printBookings,indigoPlannerAvailable:canReadJobs(actor),productionOperations:canReadJobs(actor)?operationEvidence(store,routing()).filter(r=>!hidden(r.job)):undefined,printPlanningEnabled:canReadJobs(actor),clientReviewsEnabled:reviews.enabled,sampleWorkflowEnabled:true,samplePushEnabled:Boolean(push),printIQJobsEnabled:canReadJobs(actor)&&jobsConfigured(),capabilities:actor.role==='manager'?['deactivateStaff']:[]});
  }
@@ -112,7 +135,7 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
    return send(200,result);
  }
  if(path==='/api/outbox'){store.manager(actor);return send(200,store.db.prepare('SELECT id,channel,entity,state,receipt,created FROM outbox ORDER BY created DESC').all());}
- if(path.startsWith('/api/media/')){const m=store.require('media',path.slice('/api/media/'.length));const sampleMedia=productionStaff(actor) && store.all('sample').some(s=>s.media===m.id);const permitted=sampleMedia || (m.kind==='jobVideo' ? canReadJobs(actor) && Boolean(store.get('jobVideo',m.id)) : m.owner===actor.id||actor.role==='manager');need(permitted,'This media is not available to your account.',403);const bytes=readFileSync(join(mediaDir,m.id));res.writeHead(200,{'Content-Type':m.mime,'Content-Length':bytes.length,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return res.end(bytes);}
+ if(path.startsWith('/api/media/')){const m=store.require('media',path.slice('/api/media/'.length));const sampleMedia=productionStaff(actor) && Boolean(store.db.prepare("SELECT 1 FROM records WHERE kind='sample' AND json_extract(doc,'$.media')=? LIMIT 1").get(m.id));const permitted=sampleMedia || (m.kind==='jobVideo' ? canReadJobs(actor) && Boolean(store.get('jobVideo',m.id)) : m.owner===actor.id||actor.role==='manager');need(permitted,'This media is not available to your account.',403);return streamMedia(req,res,m,mediaDir,{'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});}
  }
  if(req.method==='POST' && path==='/api/media' && url.searchParams.has('jobVideo')){
    need(jobsConfigured(),'PrintCRM needs its printIQ integration credential to attach job videos.',503);

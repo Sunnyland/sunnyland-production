@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {Readable} from 'node:stream';
+import {Readable,Writable} from 'node:stream';
 import {mkdtempSync,rmSync,readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -47,8 +47,13 @@ function fixture(t) {
  async function call(url,{body,token=first,headers={}}={}) {
    const req=Readable.from(body?[body]:[]);req.method=body?'POST':'GET';req.url=url;req.socket={remoteAddress:'127.0.0.1'};
    req.headers={host:'localhost',authorization:'Bearer '+token,...headers};
-   return await new Promise(resolve=>{let status,ht;server.emit('request',req,{writeHead(s,h){status=s;ht=h;},
-      end(b){resolve({status,data:ht['Content-Type']==='application/json'?JSON.parse(b):b});}});});
+   // A writable response, so streamed media (piped from disk) is collected like a single end(bytes).
+   return await new Promise(resolve=>{let status,ht;const chunks=[];
+      const res=new Writable({write(chunk,_,done){chunks.push(Buffer.from(chunk));done();}});
+      res.writeHead=(s,h)=>{status=s;ht=h;};
+      const finish=res.end.bind(res);res.end=b=>{if(b!==undefined)chunks.push(Buffer.from(b));return finish();};
+      res.on('finish',()=>{const body=Buffer.concat(chunks);resolve({status,data:ht['Content-Type']==='application/json'?JSON.parse(body):body});});
+      server.emit('request',req,res);});
  }
  const post=(options={})=>call('/api/media?jobVideo='+job+'&jobId='+(options.jobId??id)+(options.rep===undefined?'':'&rep='+options.rep),{
    body:options.body??bytes,token:options.token,headers:{'content-type':options.mime??'video/quicktime','idempotency-key':key,
