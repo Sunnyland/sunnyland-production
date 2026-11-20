@@ -1,0 +1,29 @@
+[Unit]
+Description=Sunnyland Production app service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=sunnyland-production
+Group=sunnyland-production
+WorkingDirectory=/opt/sunnyland-production/app
+Environment=HOST=192.168.0.35
+Environment=PORT=5180
+Environment=SUNNYLAND_DATA=/var/lib/sunnyland-production
+Environment=SUNNYLAND_ALLOWED_PEERS=127.0.0.1,::1,192.168.0.35,192.168.0.20,192.168.0.50
+EnvironmentFile=-/etc/sunnyland-production/private.env
+ExecStartPre=/usr/bin/test -s /var/lib/sunnyland-production/production.sqlite
+ExecStart=/opt/sunnyland-production/node/bin/node server.mjs
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+StateDirectory=sunnyland-production
+StateDirectoryMode=0700
+
+[Install]
+WantedBy=multi-user.target

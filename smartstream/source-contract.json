@@ -1,0 +1,74 @@
+{
+  "status": "isolated offline app integration candidate",
+  "enabled": false,
+  "readyToSend": false,
+  "actualDfeFieldMappingVerified": false,
+  "defaultVerifiedSourceContracts": {},
+  "networkOrHttpInterfacePresent": false,
+  "providerSenderPresent": false,
+  "existingAppOutboxUsed": false,
+  "entryPoints": {
+    "emptyState": "Returns independent plain JSON event/run state.",
+    "reducePrintReceipt": "Pure reduction of state, server-owned current inventory and a normalized receipt. Returns candidate projection or held reason. Does not persist or send.",
+    "projectPrintMilestones": "Projects only the current accepted product, generation, press and explicitly bound execution attempts."
+  },
+  "authorityBoundary": {
+    "sourceContracts": "Server-owned registry supplied by the future app hook. No actual .12 contract is registered. Receipt fields cannot install a trusted mapping; caller verified flags are rejected.",
+    "positiveFixtures": "Only an explicitly synthetic verified contract is passed by offline tests. These tests do not establish real SmartStream field meanings.",
+    "currentInventory": "Server-owned output of fresh accepted-product metadata plus the complete current submitted-run manifest. Its evidence hashes/completeness assertions must be obtained by a future verified collector; this pure module does not authenticate how those snapshots were obtained.",
+    "ingress": "Authentication, receipt provenance acquisition, persistent storage and durable native-write reconciliation remain outside this candidate."
+  },
+  "contextRequiredFields": [
+    "schemaVersion", "jobNo", "acceptedProductKey", "generationId", "pressId",
+    "generationStartedAt", "asOf", "inventoryEvidence", "sections"
+  ],
+  "inventoryEvidence": {
+    "kind": "accepted-product-and-bound-run-manifest",
+    "complete": true,
+    "current": true,
+    "acceptanceSha256": "SHA256 of the actual accepted-product inventory",
+    "runManifestSha256": "SHA256 of the current complete run/part manifest"
+  },
+  "sectionRequiredFields": ["sectionKey", "printingOperationKey", "parts"],
+  "partRequiredFields": ["partId", "unit", "production", "hardcopy_proof"],
+  "runBinding": {
+    "executionId": "Exact current physical execution/attempt identity; not a job-name guess. Distinct submissions/reprints cannot be summed.",
+    "requiredGoodQuantity": "Positive required good quantity in the part's explicit target unit, verified from current job purpose and run mapping. Production orders may legitimately be one or two."
+  },
+  "hardcopyProofBinding": "A part may explicitly require a separate hardcopy-proof execution, or use null when none is required. It must not share the production execution ID.",
+  "receiptRequiredFields": [
+    "schemaVersion", "eventId", "executionId", "jobNo", "acceptedProductKey", "generationId",
+    "pressId", "sectionKey", "partId", "purpose", "purposeMarker", "phase", "status", "final",
+    "sequence", "observedAt", "quantity", "provenance"
+  ],
+  "receiptProvenanceRequiredFields": ["contractId", "rawSha256", "physicalMarker"],
+  "quantityRequiredFields": ["goodCumulative", "sourceUnit", "mappingId"],
+  "sourceContractRequiredSemantics": [
+    "Explicitly verified source device, actual physical-output phase and physical evidence marker",
+    "Explicit originating purpose marker distinguishing hardcopy_proof from production",
+    "Actual GOOD cumulative counter, not requested copies, planned quantity, RIP/page progress or total including waste",
+    "Verified conversion from the counter's source unit to the inventory's target unit",
+    "Stable source event ID, execution attempt and source sequence; observedAt is the source event time, not an invented later collection timestamp",
+    "Final successful physical completion status; attention, failed, cancelled, queued or RIP states do not establish printed completion"
+  ],
+  "deduplication": {
+    "eventKey": ["pressId", "eventId"],
+    "identicalReplay": "No additional counts or records",
+    "conflictingReplay": "Hold; no candidate returned",
+    "quantityAggregation": "Latest nonregressing cumulative counter per exact bound run; never sum notifications or different execution IDs",
+    "regressions": "Counter, sequence conflict or terminal-state regression blocks that execution until explicit reconciliation/new binding"
+  },
+  "projections": {
+    "hardcopy_proof_printed": "Separate evidence record per covered proof part; never creates a sample, approval decision, QC pass or operation timer.",
+    "hardcopyProofPrinted": "True only when a nonempty explicit required-proof inventory is fully covered.",
+    "printing_operation_completion_candidate": "Per section only after every required production part is finally successful and has sufficient actual mapped good quantity. Targets the explicit accepted Printing operation key, not Auto to Press or whole job status.",
+    "productionPrinted": "True only when every required production part across the complete accepted product is covered.",
+    "allOutputs": "Retain enabled=false, readyToSend=false and candidate-only semantics. No event is sent to PrintIQ."
+  },
+  "integrationBoundary": {
+    "appOwnerHook": "Authenticate and normalize verified receipts; persist the returned independent state/audit; expose separate proof/production evidence in snapshot and job UI.",
+    "doNotReuse": "Do not fabricate staff operation timer transitions, passing QC, folding-sample media or client approvals. Do not enqueue a new channel into the existing all-non-mail-to-Notes worker.",
+    "nativeCompletion": "Separate durable sender/readback/claim worker remains required before applying a candidate to PrintIQ."
+  },
+  "productionFilesChanged": false
+}

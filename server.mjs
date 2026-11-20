@@ -1,0 +1,185 @@
+import {hiddenJobs,observeDirectory,directoryCutoff} from './job-visibility.mjs';
+import {indigoPlanner} from './indigo-agent.mjs';
+import {checkFinish,operationEvidence,readRouting,requirementsPath} from './production-finishes.mjs';
+import {indigoCapacity, localJobDates, pressDay, savePrintRun, searchDueJobs} from './print-planning.mjs';
+import {canonicalPressJob} from './press-status.mjs';
+import {pressStatusHook} from './smartstream/status.mjs';
+import {productionStaff} from './sample-workflow.mjs';
+import {appleProvider,pushDevice,startSampleAlerts} from './sample-push.mjs';
+import {canReadJobs,searchJobs,readJob,jobVideos,receiveJobVideo,printIQReadError} from './job-documents.mjs';
+import {createJobsReader} from './printiq-application.mjs';
+import {resolveTicket} from './job-tickets.mjs';
+import {clientReviewSettings, staffReviews, publicReview} from './client-reviews.mjs';
+import http from 'node:http';
+import {PrintIQ} from './printiq.mjs';
+import {mkdirSync,readFileSync,writeFileSync,existsSync} from 'node:fs';
+import {resolve,join} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {randomUUID,createHash} from 'node:crypto';
+import {Store,Fault,need,barcode,stockBarcodeValue} from './core.mjs';
+import {parseAllowedPeers,peerIsAllowed} from './network.mjs';
+const root=fileURLToPath(new URL('.',import.meta.url));
+export function createServer(store,{mediaDir=join(root,'data','media'),allowedPeers=parseAllowedPeers(process.env.SUNNYLAND_ALLOWED_PEERS),iq=createJobsReader(),reviews=clientReviewSettings(),push=appleProvider(),pressStatusFile=process.env.SUNNYLAND_PRESS_STATUS_FILE,requirementsFile=requirementsPath,runIndigoAgent=false}={}){
+ const press = pressStatusHook(store,{statusFile:pressStatusFile});
+ const routing=()=>readRouting(requirementsFile);
+ const planner=indigoPlanner(store,iq,{routing});
+ const jobsConfigured = () => iq.jobsConfigured ?? Boolean(iq.token);
+ mkdirSync(mediaDir,{recursive:true});
+ const server=http.createServer(async(req,res)=>{const send=(code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
+ try{need(peerIsAllowed(req.socket.remoteAddress,allowedPeers),'Connection not permitted.',403);const url=new URL(req.url,'http://localhost'),path=url.pathname;need(!req.headers.origin||new URL(req.headers.origin).host===req.headers.host,'Cross-origin requests are not allowed.',403);
+ if(path.startsWith('/sample-review/')) return await publicReview({req,res,url,store,mediaDir,settings:reviews});
+ if(path==='/health'&&req.method==='GET')return send(200,{ok:true,version:'0.1.0'});
+ if(path==='/'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'text/html','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'"});return res.end('<!doctype html><title>Sunnyland Production</title><style>body{font:20px system-ui;padding:8vw;color:#143b33;background:#f5f4ee}p{max-width:40em}</style><h1>Sunnyland Production</h1><p>The shared service is running. Connect using the iPhone app. Staff sign-in is required for stock, jobs and media.</p><p>Version 0.1 pilot. Stock counts start unknown until physically verified.</p>');}
+ const token=req.headers.authorization?.replace(/^Bearer /,'');let actor=null;if(path!=='/api/login')actor=store.auth(token);
+ if(path==='/api/client-reviews') return await staffReviews({req,res,url,store,authorize:()=>store.auth(token),settings:reviews});
+ if(req.method==='GET'){
+ if(path==='/api/state'){
+   const snapshot=store.snapshot(actor),hidden=hiddenJobs(store);
+   snapshot.jobs=snapshot.jobs.filter(j=>!hidden(j.id,j.printiqId));
+   for(const field of ['samples','operations','holds','issues'])if(Array.isArray(snapshot[field]))
+     snapshot[field]=snapshot[field].filter(row=>!hidden(row.job,row.printiqId));
+   const pressMilestones=canReadJobs(actor)?press.statuses(snapshot.jobs.map(job=>job.id),{includeObserved:true}).filter(r=>!hidden(r.jobNo??r.id)):undefined;
+   const printBookings=canReadJobs(actor)?store.all('printPlanRun').filter(r=>!r.removed && !hidden(r.job,r.printiqId)).map(({id,job,printiqId,day,press,part})=>({id,job,printiqId,day,press,part})):undefined;
+   return send(200,{...snapshot,pressMilestones,printBookings,indigoPlannerAvailable:canReadJobs(actor),productionOperations:canReadJobs(actor)?operationEvidence(store,routing()).filter(r=>!hidden(r.job)):undefined,printPlanningEnabled:canReadJobs(actor),clientReviewsEnabled:reviews.enabled,sampleWorkflowEnabled:true,samplePushEnabled:Boolean(push),printIQJobsEnabled:canReadJobs(actor)&&jobsConfigured(),capabilities:actor.role==='manager'?['deactivateStaff']:[]});
+ }
+ if(path==='/api/press-results'){
+   need(canReadJobs(actor),'Job access is required.',403);
+   const values=url.searchParams.getAll('jobNo');
+   need(values.length===1 && canonicalPressJob(values[0]),'Choose one valid job number.');
+   const jobNo=canonicalPressJob(values[0]);
+   need(!hiddenJobs(store)(jobNo),'This completed job is archived.',404);
+   return send(200,{pressMilestones:press.statuses([jobNo])[0]});
+ }
+ if(path==='/api/resolve' && url.searchParams.has('indigoPlanner')){
+   store.manager(actor);need(canReadJobs(actor),'Job access is required.',403);
+   const result=await planner.dashboard();
+   const current=store.auth(token);store.manager(current);need(canReadJobs(current),'Job access is required.',403);
+   const hidden=hiddenJobs(store);
+   for(const key of ['rows','scheduled'])result[key]=result[key].filter(r=>!hidden(r.job,r.printiqId));
+   if(result.hourly?.history){
+     for(const key of ['history','bookings','review'])result.hourly[key]=result.hourly[key].filter(r=>!hidden(r.job,r.printiqId));
+     result.hourly.entries=result.hourly.history.length;
+     result.hourly.historyJobs=new Set(result.hourly.history.map(r=>r.job).filter(Boolean)).size;
+     result.hourly.completed=new Set(result.hourly.history.filter(r=>r.mis==='Complete in printIQ').map(r=>r.job)).size;
+   }
+   return send(200,result);
+ }
+ if(path==='/api/resolve' && url.searchParams.has('productionDates')){
+   need(canReadJobs(actor) && jobsConfigured(),'Live job access is required.',403);
+   let dates;
+   try{dates=await localJobDates(store,iq);}catch(error){throw printIQReadError(error);}
+   need(canReadJobs(store.auth(token)),'Job access is required.',403);
+   const hidden=hiddenJobs(store);return send(200,{dates:dates.filter(j=>!hidden(j.id,j.printiqId))});
+ }
+ if(path==='/api/resolve' && url.searchParams.has('pressPlanDay')){
+   need(canReadJobs(actor),'Job access is required.',403);
+   let runs;
+   try {runs=await pressDay(store,iq,url.searchParams.get('pressPlanDay'),url.searchParams.get('press'));}
+   catch(error){if(error instanceof Fault)throw error;throw printIQReadError(error);}
+   need(canReadJobs(store.auth(token)),'Job access is required.',403);
+   return send(200,{runs,capacity:indigoCapacity(store.all('printPlanRun'),url.searchParams.get('pressPlanDay'),url.searchParams.get('press'))});
+ }
+ if(path==='/api/stock'){return send(200,store.summary(url.searchParams.get('code')));}
+ if(path==='/api/resolve' && (url.searchParams.has('jobs') || url.searchParams.has('printJob'))){
+   need(canReadJobs(actor),'Job access is required.',403);
+   need(jobsConfigured(),'PrintCRM needs its printIQ integration credential to read jobs.',503);
+   let result;
+   try {
+     if(url.searchParams.has('printJob')){
+       const job=await readJob(iq,url.searchParams.get('printJob'),url.searchParams.get('jobId'));
+       observeDirectory(store,[job]);need(!hiddenJobs(store)(job.id,job.printiqId),'This completed job is archived.',404);
+       result={job,videos:jobVideos(store,job.id,job.printiqId),pressMilestones:press.statuses([job.id])[0]};
+     } else if(url.searchParams.get('order')==='due')result=await searchDueJobs(iq,url.searchParams,directoryCutoff());
+     else result=await searchJobs(iq,url.searchParams.get('jobs'),url.searchParams.get('before'),directoryCutoff());
+   } catch(error){throw printIQReadError(error);}
+   need(canReadJobs(store.auth(token)),'Job access is required.',403);
+   if(result.jobs){observeDirectory(store,result.jobs);const hidden=hiddenJobs(store);result.jobs=result.jobs.filter(j=>!hidden(j.id,j.printiqId));}
+   return send(200,result);
+ }
+ if(path==='/api/resolve'&&url.searchParams.has('ticket')){
+   const code=barcode(url.searchParams.getAll('ticket'));
+   const operations=new PrintIQ();
+   const result=await resolveTicket(store,code,operations,canReadJobs(actor) && jobsConfigured()?iq:operations);
+   store.auth(token);need(!hiddenJobs(store)(result.job),'This completed job is archived.',404);
+   return send(200,result);
+ }
+ if(path==='/api/resolve'){
+   const code=barcode(url.searchParams.getAll('code'),stockBarcodeValue);
+   const alias=store.get('alias',code);
+   const matches=store.all('stock').filter(stock=>stock.id===code || stock.supplier_ref===code || alias?.stock===stock.id);
+   const result={code,matches};
+   if(url.searchParams.get('balance')==='1' && matches.length===1) result.balance=store.summary(matches[0].id);
+   return send(200,result);
+ }
+ if(path==='/api/outbox'){store.manager(actor);return send(200,store.db.prepare('SELECT id,channel,entity,state,receipt,created FROM outbox ORDER BY created DESC').all());}
+ if(path.startsWith('/api/media/')){const m=store.require('media',path.slice('/api/media/'.length));const sampleMedia=productionStaff(actor) && store.all('sample').some(s=>s.media===m.id);const permitted=sampleMedia || (m.kind==='jobVideo' ? canReadJobs(actor) && Boolean(store.get('jobVideo',m.id)) : m.owner===actor.id||actor.role==='manager');need(permitted,'This media is not available to your account.',403);const bytes=readFileSync(join(mediaDir,m.id));res.writeHead(200,{'Content-Type':m.mime,'Content-Length':bytes.length,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return res.end(bytes);}
+ }
+ if(req.method==='POST' && path==='/api/media' && url.searchParams.has('jobVideo')){
+   need(jobsConfigured(),'PrintCRM needs its printIQ integration credential to attach job videos.',503);
+   const video=await receiveJobVideo({req,params:url.searchParams,store,iq,token,mediaDir});
+   return send(201,video);
+ }
+ need(req.method==='POST','Endpoint not found.',404);const max=path==='/api/media'?100*1024*1024:1024*1024;const parts=[];let size=0;for await(const part of req){size+=part.length;need(size<=max,'File or request is too large.',413);parts.push(part);}const bytes=Buffer.concat(parts);
+ if(path!=='/api/login')actor=store.auth(token);
+ if(path==='/api/media'){const mime=req.headers['content-type'];need(['image/jpeg','image/png','video/mp4','video/quicktime'].includes(mime),'Use JPEG, PNG, MP4 or MOV.');need(bytes.length>=12,'Upload is empty.');const valid=mime==='image/jpeg'?bytes[0]===255&&bytes[1]===216:mime==='image/png'?bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])):bytes.subarray(4,8).toString()==='ftyp';need(valid,'The file does not match its media type.');const id=randomUUID();writeFileSync(join(mediaDir,id),bytes,{flag:'wx'});const m=store.put('media',{id,owner:actor.id,mime,bytes:size,sha256:createHash('sha256').update(bytes).digest('hex'),at:new Date().toISOString()});return send(201,m);}
+ let body;try{body=JSON.parse(bytes.toString('utf8'));}catch{throw new Fault('Invalid JSON.');}
+ if(path==='/api/login')return send(200,store.login(body.email,body.password));
+ if(path==='/api/action' && url.searchParams.get('indigoPlanner')==='1'){
+   const authorize=()=>{const a=store.auth(token);store.manager(a);need(canReadJobs(a),'Job access is required.',403);return a;};
+   need(body && typeof body==='object','Invalid planner action.');
+   return send(200,await planner.control(authorize(),req.headers['idempotency-key'],body,authorize));
+ }
+ if(path==='/api/action' && url.searchParams.get('checkedPrintFinish')==='1'){
+   need(canReadJobs(actor),'Job access is required.',403);need(body && typeof body==='object','Invalid Printing operation.');
+   return send(200,checkFinish(store,actor,req.headers['idempotency-key'],body,routing()));
+ }
+ if(path==='/api/action' && url.searchParams.get('printPlan')==='1'){
+   store.manager(actor);need(canReadJobs(actor),'Job access is required.',403);
+   need(body && typeof body==='object' && typeof body.job==='string','Choose a job.');
+   const key=req.headers['idempotency-key'];
+   const prior=typeof key==='string' && store.db.prepare('SELECT 1 FROM requests WHERE actor=? AND key=?').get(actor.id,key);
+   let job=null;
+   if(!prior && !body.remove){
+     if(body.printiqId!=null){
+       need(Number.isSafeInteger(body.printiqId) && body.printiqId>0,'Choose an exact printIQ job.');
+       try{job=await readJob(iq,body.job,body.printiqId);}catch(error){throw printIQReadError(error);}
+     }else job=store.require('job',body.job);
+   }
+   const current=store.auth(token);need(canReadJobs(current),'Job access is required.',403);
+   return send(200,savePrintRun(store,current,key,body,job));
+ }
+ if(path==='/api/action' && url.searchParams.get('pushDevice')==='1'){
+   need(body && typeof body==='object','Invalid iPhone registration.');
+   pushDevice(store,actor,body);return send(200,{ok:true});
+ }
+ if(path==='/api/staff/deactivate'){
+   store.manager(actor);
+   const id=body?.id;
+   need(typeof id==='string' && id.length>0,'Choose a staff account.');
+   need(id!==actor.id,'Another manager must remove your access.',409);
+   store.db.exec('BEGIN IMMEDIATE');
+   try {
+     const staff=store.require('user',id);
+     if(staff.enabled){
+       store.put('user',{...staff,enabled:false});
+       store.db.prepare('DELETE FROM push_devices WHERE actor=?').run(id);
+       store.audit(actor,'deactivate_staff',id,{name:staff.name});
+     }
+     store.db.prepare('DELETE FROM sessions WHERE user=?').run(id);
+     store.db.exec('COMMIT');
+   } catch(error) { store.db.exec('ROLLBACK'); throw error; }
+   return send(200,{id,enabled:false});
+ }
+ if(path==='/api/logout'){if(body?.installation)pushDevice(store,actor,{installation:body.installation,remove:true});store.logout(token);return send(200,{ok:true});}
+ if(path==='/api/action'){need(body&&typeof body.type==='string'&&body.data&&typeof body.data==='object'&&!Array.isArray(body.data),'Invalid action.');const key=req.headers['idempotency-key'];const previous=typeof key==='string'&&store.db.prepare('SELECT 1 FROM requests WHERE actor=? AND key=?').get(actor.id,key);if(!previous&&!(body.type==='operation'&&body.data.state==='paused')&&body.data.job&&['issue','reserve','operation','hold','sample'].includes(body.type)&&process.env.PRINTIQ_ACTIVE_STATUSES)await new PrintIQ().refresh(store,body.data.job);return send(200,store.action(store.auth(token),key,body.type,body.data));}
+ throw new Fault('Endpoint not found.',404);
+ }catch(e){send(e.status||500,{error:e instanceof Fault?e.message:'The operation could not be completed. No success was confirmed.'});if(!(e instanceof Fault))console.error(e.stack);}
+ });
+ if(runIndigoAgent){
+   let timer;
+   server.once('listening',()=>{void planner.tick();timer=setInterval(()=>void planner.tick(),60000);timer.unref();});
+   server.once('close',()=>clearInterval(timer));
+ }
+ return server;
+}
+if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){const data=process.env.SUNNYLAND_DATA||join(root,'data');mkdirSync(data,{recursive:true});const store=new Store(join(data,'production.sqlite'));need(store.all('user').length,'Run setup.mjs to create the first staff account.');const push=appleProvider();const server=createServer(store,{mediaDir:join(data,'media'),push,runIndigoAgent:true});startSampleAlerts(store,push);server.requestTimeout=120000;server.headersTimeout=15000;server.listen(Number(process.env.PORT||5180),process.env.HOST||'127.0.0.1',()=>console.log('Sunnyland Production service listening. Use an HTTPS reverse proxy for phones.'));}

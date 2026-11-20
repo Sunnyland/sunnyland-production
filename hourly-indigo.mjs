@@ -1,0 +1,109 @@
+import {rememberStatus} from './job-visibility.mjs';
+import {printIQJobKey} from './job-tickets.mjs';
+import {openSync, closeSync, fstatSync, readFileSync, constants} from 'node:fs';
+import {choosePrintDay, earliestPressStart, finishDay, plantMinute, sequencePressDay} from './print-planning.mjs';
+import {Fault} from './core.mjs';
+
+const kind='printPlanRun', marker='indigoHourlyScan', press='HP Indigo 7900', actor={id:'indigo-hourly-agent'};
+const path='/var/lib/sunnyland-production/indigo-hourly.json';
+
+export function readHourlyFeed(file=path){
+  let fd;
+  try{
+    fd=openSync(file,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
+    const st=fstatSync(fd);
+    if(!st.isFile() || !(file===path?st.uid===0:[0,process.geteuid()].includes(st.uid)) || (st.mode&0o027) || st.size>32*1024*1024)return null;
+    const feed=JSON.parse(readFileSync(fd,'utf8'));
+    if(feed.schema!==3 || !Number.isFinite(Date.parse(feed.asOf)) || !Number.isFinite(Date.parse(feed.generatedAt)) ||
+       !Array.isArray(feed.history)||!Array.isArray(feed.jobs))return null;
+    return feed;
+  }catch{return null;}finally{if(fd!==undefined)closeSync(fd);}
+}
+export function hourlySummary(store,clock=new Date()){
+  const row=store.get(marker,'latest');
+  if(!row)return {state:'Waiting for the first hourly source scan'};
+  const stale=clock.getTime()-Date.parse(row.asOf)>2*3600000;
+  return {...row,state:stale?'Hourly source overdue':row.state};
+}
+export function planHourly(store,feed,now=new Date()){
+  if(!feed || now-Date.parse(feed.asOf)>2*3600000 || Date.parse(feed.generatedAt)>now.getTime()+60000)return;
+  store.db.exec('BEGIN IMMEDIATE');
+  try{
+    const enabled=store.get('indigoPlannerConfig','indigo')?.enabled===true;
+    const last=store.get(marker,'latest');
+    if(last && (last.generatedAt>feed.generatedAt || (last.generatedAt===feed.generatedAt && (last.enabled || !enabled)))){
+      store.db.exec('COMMIT');return;
+    }
+    if(feed.completeStatusIds?.length)store.put('jobStatusCatalogue',{id:'current',completeIds:feed.completeStatusIds});
+    for(const [job,printiqId] of feed.undatedComplete??[])rememberStatus(store,{job,printiqId,complete:true},feed.asOf);
+    for(const row of feed.visibility??[])rememberStatus(store,row,feed.asOf);
+    const observedComplete=new Set((feed.visibility??[]).filter(v=>v.completedAt || v.complete).map(v=>v.job));
+    for(const row of feed.jobs)if(row.state==='complete' && !observedComplete.has(row.job))rememberStatus(store,{...row,complete:true},feed.asOf);
+    const day=finishDay(now.toISOString()), minute=plantMinute(now), bookings=store.all(kind);
+    const changed=new Map(),kept=[],future=new Map(),pending=[],review=[];
+    const jobKey=value=>printIQJobKey(value)??value;
+    const localOps=store.all('operation'),holds=new Set(store.all('hold').filter(h=>!h.releasedAt).map(h=>jobKey(h.job)));
+    const localJobs=store.all('job');
+    const manualQueue=store.all('indigoReadyRun').filter(r=>r.state==='waiting');
+    const checks=new Set(store.all('checkedPrintFinish').filter(r=>r.active).map(r=>r.id));
+    const historyJobs=new Set(feed.history.map(r=>r.job).filter(Boolean));
+    const closed=new Set(feed.jobs.filter(j=>j.state==='complete').map(j=>j.job));
+    const reviewed=new Map(feed.jobs.map(j=>[j.job,j]));
+    const todays=sequencePressDay(bookings.filter(b=>!b.removed && b.day===day && b.press===press));
+    const started=new Set(todays.filter(r=>r.start!==null && r.start<=minute).map(r=>r.id));
+    for(const b of bookings){
+      const key=jobKey(b.job),job=reviewed.get(key), same=localOps.some(op=>jobKey(op.job)===key && String(op.printiqOperationKey)===b.operationKey && ['running','paused','completed'].includes(op.state));
+      const unstarted=b.day>day || (b.day===day && !started.has(b.id));
+      if(b.hourly && !b.managerOverride && !b.removed && unstarted && !same && enabled &&
+          (closed.has(key) || (job && !feed.approvalError && !feed.directoryError && !['Accepted routing unavailable','Exact printIQ job unavailable'].includes(job.state)) ||
+            (!job && !feed.directoryError && !feed.approvalError)))future.set(b.id,b);
+      else kept.push(b);
+    }
+    const fixed=kept.filter(b=>!b.removed);
+    for(const job of feed.jobs){
+      if(job.state!=='open'){
+        if(!['complete','cancelled','other press'].includes(job.state))review.push({id:job.job,job:job.job,reason:job.state});
+        continue;
+      }
+      for(const item of job.runs){
+        const run={id:item.id,job:job.job,name:job.name,printiqId:job.printiqId,press,part:item.part,stock:item.stock,finishes:item.finishes,
+          minutes:item.minutes,due:finishDay(job.due),fixedStart:null,operationKey:item.operationKey,agentOperation:item.operation,agentRelease:true,hourly:true};
+        const locals=localJobs.filter(row=>jobKey(row.id)===job.job);
+        let reason='';
+        if(holds.has(job.job) || locals.some(local=>local.active===false || (local.printiqId && local.printiqId!==run.printiqId)))reason='Check local job status or hold';
+        else if(checks.has(item.operation)||localOps.some(op=>jobKey(op.job)===job.job && String(op.printiqOperationKey)===item.operationKey && ['running','paused','completed'].includes(op.state)))reason='Operation already started or finished';
+        else if(kept.some(b=>b.id===item.id && (!b.removed || b.managerOverride)))continue;
+        else if(fixed.some(b=>jobKey(b.job)===job.job && b.press===press && (!b.agentOperation || b.agentOperation===item.operation || b.operationKey===item.operationKey || b.job!==job.job)))reason='Existing Indigo booking';
+        else if(manualQueue.some(r=>jobKey(r.job)===job.job && (!r.operation || r.operation===item.operation || r.job!==job.job)))reason='Existing manual release';
+        else if(item.estimateIssue)reason=item.estimateIssue;
+        else if(!(Number.isInteger(item.minutes)&&item.minutes>0)||!item.stock||!run.due)reason='Check required date, stock or run duration';
+        if(reason)review.push({id:item.id,job:job.job,reason});
+        else pending.push(run);
+      }
+    }
+    pending.sort((a,b)=>a.due.localeCompare(b.due)||a.stock.localeCompare(b.stock)||a.finishes.localeCompare(b.finishes)||a.id.localeCompare(b.id));
+    const published=[];
+    for(const run of pending){
+      try{run.day=choosePrintDay(run,fixed,now);}catch(e){
+        if(!(e instanceof Fault))throw e;
+        review.push({id:run.id,job:run.job,reason:e.message});continue;
+      }
+      run.earliestStart=earliestPressStart(press,run.day,now);
+      fixed.push(run);published.push({id:run.id,job:run.job,part:run.part,day:run.day,press});
+      if(!enabled)continue;
+      const old=store.get(kind,run.id);
+      if(old?.managerOverride || (old&&!old.hourly))continue;
+      run.revision=(old?.revision??0)+1;
+      if(!old || old.removed || Object.keys(run).some(k=>k!=='revision' && run[k]!==old[k]))changed.set(run.id,run);
+      future.delete(run.id);
+    }
+    for(const [id,old] of future)changed.set(id,{...old,removed:true,revision:old.revision+1});
+    for(const run of changed.values()){store.put(kind,run);store.audit(actor,run.removed?'withdraw_auto_indigo':'plan_auto_indigo',run.id,{job:run.job,day:run.day});}
+    const summary={id:'latest',state:[feed.approvalError,feed.directoryError].filter(Boolean).join(' ') || 'Sources checked',enabled,asOf:feed.asOf,generatedAt:feed.generatedAt,
+      entries:feed.history.length,historyJobs:historyJobs.size,completed:[...historyJobs].filter(j=>closed.has(j)).length,
+      history:feed.history.map(h=>({...h,id:h.entry,mis:reviewed.get(h.job)?.state==='complete'?'Complete in printIQ':reviewed.get(h.job)?.state==='cancelled'?'Cancelled':'Completion unverified'})),
+      bookings:published,review};
+    store.put(marker,summary);
+    store.db.exec('COMMIT');
+  }catch(e){store.db.exec('ROLLBACK');throw e;}
+}

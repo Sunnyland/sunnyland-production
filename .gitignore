@@ -1,0 +1,11 @@
+data/
+.env
+*.env
+*.sqlite*
+__pycache__/
+*.pyc
+DerivedData/
+xcuserdata/
+*.xcuserstate
+__pycache__/
+*.pyc

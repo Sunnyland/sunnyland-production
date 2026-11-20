@@ -1,0 +1,158 @@
+{
+  "package.json": {
+    "bytes": 211,
+    "sha256": "52c4d753b0a85245fcaeef5da4f36f9e5761d4e5f043a509ede21d19779a04d5"
+  },
+  ".gitignore": {
+    "bytes": 85,
+    "sha256": "e380e75ac4f6a89b209a5e520b27b1d8917e883a0ec7eeb24303e895484049ef"
+  },
+  "README.md": {
+    "bytes": 16790,
+    "sha256": "4ce770892be8b12d5b3216bbc5320939efb0273a10bfa6be23c5a106b0049e8d"
+  },
+  "Sunnyland_Production_App_Brief.md": {
+    "bytes": 23328,
+    "sha256": "e94846317c577868c8f2ca2cfbd6548fcf2ef082df76746045c011ec95ca227e"
+  },
+  "catalog.json": {
+    "bytes": 526829,
+    "sha256": "5b551b8e375f1063e6baab2cf6bf2e9b54dd95507273ca3acf78772ca9773ea9"
+  },
+  "core.mjs": {
+    "bytes": 18712,
+    "sha256": "9bc602ee7beb0ca58392a681048f43d58dc089788213077ad9460019fe463b55"
+  },
+  "inventory.mjs": {
+    "bytes": 5829,
+    "sha256": "bf784dbe50e307e2a417dbfd4526d48d20c937e06715d067ae893386587313a3"
+  },
+  "server.mjs": {
+    "bytes": 5729,
+    "sha256": "406af4c915ff91c569709a122258e3177299f696961f66f201d344ab688867d8"
+  },
+  "network.mjs": {
+    "bytes": 821,
+    "sha256": "44dcb62cf9f3251366a383c28a0afed6ad64a45bc458c3a7d6f48b8918d7bd38"
+  },
+  "setup.mjs": {
+    "bytes": 1104,
+    "sha256": "d897ba897957a09a8aafcca236e58429be3801d7fcdab41f55d88f45f8057c6e"
+  },
+  "setup_staff.py": {
+    "bytes": 677,
+    "sha256": "12c4e4b2ce8f6374808ecd67cd7db873795284a4f5bf7aaa456eaec5c8b03b2e"
+  },
+  "admin.mjs": {
+    "bytes": 2211,
+    "sha256": "4834138fad6cebf17ceec329411ad270eee06a19913ed660b06048f2c18b2d38"
+  },
+  "printiq.mjs": {
+    "bytes": 4533,
+    "sha256": "1b8a70a004af4b4ad0a898411d9ad1a5faea0f1eab1b14df58e8d699c43af6ae"
+  },
+  "mail_transport.py": {
+    "bytes": 3408,
+    "sha256": "746d8449932e1b4c24412df305813fd7d77a8b7196645b4e3cac8dfcb0654347"
+  },
+  "worker.mjs": {
+    "bytes": 3211,
+    "sha256": "108e55f6b3ef49b6c950e0dd78611add94582ee7d1bb66fc52dc44fa4b3bb15e"
+  },
+  "verify-mac.sh": {
+    "bytes": 326,
+    "sha256": "68ae043c50a3bddca27ca6fa13690e7e33d17a9208ef3a88fd1beaff21f6bdb5"
+  },
+  "provision.mjs": {
+    "bytes": 3324,
+    "sha256": "52b9163992a31f3513884fece86c95d4e95c6115c15d3bea1c071c6a263fcfdb"
+  },
+  "Set-Manager-Password.ps1": {
+    "bytes": 3923,
+    "sha256": "451672044cd09d6ae5fe2ff3dfce8ded020b87c61575ea5af4298a39b679e0f6"
+  },
+  "Start-Manager-Setup.ps1": {
+    "bytes": 1617,
+    "sha256": "0bdece4a32359b76685fc20bb49f74c43b0454017c7dd081f5686c4f640ac034"
+  },
+  "activate_manager.py": {
+    "bytes": 1737,
+    "sha256": "c4207a5515cd9801db59dfa9681cddb9fbdad2f76182424fc8b0ca07046bedbe"
+  },
+  "deploy/backup_state.py": {
+    "bytes": 3977,
+    "sha256": "d4940b466f591cdf0a4b2a190b6c8f417f39112c5e9f09672bccadb1b594fe47"
+  },
+  "deploy/install_printcrm.py": {
+    "bytes": 16022,
+    "sha256": "c2b33d8d73a49cd3f8558fb3766857aeb1a908ee3ecaf8ff91496469910d3a5e"
+  },
+  "deploy/PRINTCRM_DEPLOYMENT.md": {
+    "bytes": 10732,
+    "sha256": "6cce47df95d051b0b835563a9e1fcfa5fe99189d4dfab785fc01c212958dbe82"
+  },
+  "deploy/sunnyland-production.service": {
+    "bytes": 840,
+    "sha256": "2122be1aee1a0580590fb1b895421544e5468ead10ab517dfd25cbb62d2a993c"
+  },
+  "test/backup_state_test.py": {
+    "bytes": 8053,
+    "sha256": "a542e95a37f7c4072fdb944a0df7a87032ce15df62f4475b38bc48950db66841"
+  },
+  "test/core.test.mjs": {
+    "bytes": 5802,
+    "sha256": "09ec08c9069e3f3715997c78d2f4472fabe0804bb54ccbe1a6ee6962963bba6f"
+  },
+  "test/cut_priority.test.mjs": {
+    "bytes": 1592,
+    "sha256": "1c3b5c641d4839adf34c20cad8315425bda64b1afddf073b0ca236e786624950"
+  },
+  "test/integrations.test.mjs": {
+    "bytes": 6104,
+    "sha256": "a5e2909a68a3c81947f92b9879f64631685b5d356974c6b33311409e6d0b6167"
+  },
+  "test/network.test.mjs": {
+    "bytes": 2323,
+    "sha256": "054bfe4ac0f4f49479780833f239e5c9c82273438f3c2c13e04932198f6c97c8"
+  },
+  "test/provision.test.mjs": {
+    "bytes": 897,
+    "sha256": "0679701f0dea53b2bf59806284a6525810d3b15bbde4e67ea0ed6d3b969bfe96"
+  },
+  "test/regressions.test.mjs": {
+    "bytes": 3036,
+    "sha256": "ac90c51073495d273ab8a63b3e39a7ba89d1c61f2fa94e47e6296d163ce53431"
+  },
+  "test/test_mail.py": {
+    "bytes": 1238,
+    "sha256": "659d982fa7664c00191c16641ff8c803d16bc531a1478a067d5c0c79f7acfa2a"
+  },
+  "ios/SunnylandProduction/App.swift": {
+    "bytes": 27739,
+    "sha256": "930e51439573bf441e64d40907434f057b1177d92867b5feafdca01e34a6cf85"
+  },
+  "ios/SunnylandProduction/Info.plist": {
+    "bytes": 1499,
+    "sha256": "c4e3560f489bab1c21721c25278a91efff17b5dab744d456718a17519a4c86a1"
+  },
+  "ios/SunnylandProduction/ManagerViews.swift": {
+    "bytes": 2941,
+    "sha256": "b87786f39f08cef372f476b5a5a62b6d08e1caba9d169b2773e99cae51287c69"
+  },
+  "ios/SunnylandProduction/PendingAction.swift": {
+    "bytes": 2012,
+    "sha256": "cc08f5e4ffd9ba8f9628e767c6dd233b3b550f058ff290668a977f3f04e5746a"
+  },
+  "ios/SunnylandProduction/StockActions.swift": {
+    "bytes": 5891,
+    "sha256": "bb2cb0607aeca371997762affeb2ec177895f4806f4b4afcc4a32dabfbf2efb2"
+  },
+  "ios/SunnylandProduction.xcodeproj/project.pbxproj": {
+    "bytes": 5099,
+    "sha256": "3e4e46104c62b374d990c92633108b835738fdf791bd2424cb8969acc3b9d7b1"
+  },
+  "ios/SunnylandProduction.xcodeproj/xcshareddata/xcschemes/SunnylandProduction.xcscheme": {
+    "bytes": 1905,
+    "sha256": "35aa1bf4934ab6896797113ade50eab4505f6f74855984450f234fb8ad37e442"
+  }
+}

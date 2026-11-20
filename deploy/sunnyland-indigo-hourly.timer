@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh the Indigo production plan every hour
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+AccuracySec=30s
+Unit=sunnyland-indigo-hourly.service
+
+[Install]
+WantedBy=timers.target

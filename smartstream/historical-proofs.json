@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "confirmedAt": "2026-11-19T21:43:21.382520+00:00",
+  "userQuestion": "Were J064299-01 SmartStream entries IVEG Tent Card Proof_1 and IVEG Tent Card Proof_2 submitted13November printed as hardcopy proofs?",
+  "userAnswer": "Yes\u2014both were hardcopy proofs",
+  "proofs": [
+    {
+      "name": "J064299-01-Proof_1",
+      "canonicalMISJobNo": "J064299-01",
+      "queueEntryID": "f3f11e9a27ca41f6bd94834b5a0b1318",
+      "nativeJobID": "f3f11e9a27ca41f6bd94834b5a0b1318",
+      "nativeRootID": "ID_f3f11e9a27ca41f6bd94834b5a0b1318",
+      "reportedOutputQuantity": "2",
+      "physicalPrintingEndUTC": "2026-11-13T01:54:44.000Z",
+      "physicalPrintingEndMelbourne": "2026-11-13T12:54:44+11:00",
+      "returnedJdfSha256": "0258f79bed8734f139c2e4a21103b00b1d619271119c55ace698c4a152f7f68d",
+      "purpose": "hardcopy_proof",
+      "purposeConfirmedBy": "explicit_user_answer_in_this_chat",
+      "historicalProofCaseValidated": true,
+      "currentMISGenerationVerified": false,
+      "acceptedProductKey": null,
+      "sectionBindingVerified": false,
+      "currentProofCoverageVerified": false,
+      "printingOperationCompletionEligible": false
+    },
+    {
+      "name": "J064299-01-Proof_2",
+      "canonicalMISJobNo": "J064299-01",
+      "queueEntryID": "bb3867f3dd9a4383a3e3f6186650b720",
+      "nativeJobID": "bb3867f3dd9a4383a3e3f6186650b720",
+      "nativeRootID": "ID_bb3867f3dd9a4383a3e3f6186650b720",
+      "reportedOutputQuantity": "2",
+      "physicalPrintingEndUTC": "2026-11-13T01:55:06.000Z",
+      "physicalPrintingEndMelbourne": "2026-11-13T12:55:06+11:00",
+      "returnedJdfSha256": "6433a6822edd48178d281254168e72ef148b90f8c157631c03a7c5c773b6aa27",
+      "purpose": "hardcopy_proof",
+      "purposeConfirmedBy": "explicit_user_answer_in_this_chat",
+      "historicalProofCaseValidated": true,
+      "currentMISGenerationVerified": false,
+      "acceptedProductKey": null,
+      "sectionBindingVerified": false,
+      "currentProofCoverageVerified": false,
+      "printingOperationCompletionEligible": false
+    }
+  ],
+  "scope": "Historical proof-purpose validation for the exact two source entries only. No general filename or1/2-copy rule and no current-version readiness inferred.",
+  "productionChanges": false,
+  "PrintIQOperationWrites": 0,
+  "appStatusWrites": 0
+}

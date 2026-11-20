@@ -1,0 +1,18 @@
+[Unit]
+Description=Read current Indigo approvals, press history and exact printIQ routing
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=sunnyland-production
+UMask=0027
+EnvironmentFile=-/etc/sunnyland-production/indigo-hourly.conf
+ExecStart=/usr/bin/python3 -B /opt/sunnyland-indigo-hourly/indigo_sources.py
+TimeoutStartSec=50min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/sunnyland-production

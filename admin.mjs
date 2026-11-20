@@ -1,0 +1,11 @@
+import {Store,need} from './core.mjs';import {PrintIQ} from './printiq.mjs';import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';import {join} from 'node:path';import {fileURLToPath} from 'node:url';import {randomUUID} from 'node:crypto';
+const root=fileURLToPath(new URL('.',import.meta.url)),data=process.env.SUNNYLAND_DATA||join(root,'data');
+mkdirSync(data,{recursive:true});const s=new Store(join(data,'production.sqlite'));
+try{const actor=s.all('user').find(u=>u.email===process.env.SUNNYLAND_ADMIN_EMAIL);need(actor?.enabled&&actor.role==='manager','Set SUNNYLAND_ADMIN_EMAIL to an existing manager. This command requires trusted server filesystem access.');const [command,arg]=process.argv.slice(2);
+ if(command==='action'){const input=JSON.parse(readFileSync(arg,'utf8'));console.log(JSON.stringify(s.action(actor,input.requestId||randomUUID(),input.type,input.data),null,2));}
+ else if(command==='refresh-job'){const j=await new PrintIQ().refresh(s,arg);console.log(JSON.stringify(j,null,2));}
+ else if(command==='outbox')console.log(JSON.stringify(s.db.prepare('SELECT id,channel,state,receipt,created FROM outbox ORDER BY created').all(),null,2));
+ else if(command==='requeue'){const r=s.db.prepare('SELECT * FROM outbox WHERE id=?').get(arg);need(r&&['blocked','rejected'].includes(r.state),'Only definitely blocked or rejected events can be requeued. Accepted and uncertain events cannot be resent.');s.db.prepare("UPDATE outbox SET state='pending' WHERE id=?").run(arg);s.audit(actor,'outbox_requeue',arg,{previousState:r.state});console.log('Requeued after configuration correction.');}
+ else if(command==='export'){const content={exportedAt:new Date().toISOString(),stock:s.all('stock'),lots:s.all('lot'),movements:s.all('movement'),issues:s.all('issue'),reservations:s.all('reservation'),operations:s.all('operation'),qc:s.all('qc'),holds:s.all('hold'),samples:s.all('sample'),audit:s.db.prepare('SELECT * FROM audit ORDER BY rowid').all()};writeFileSync(arg,JSON.stringify(content,null,2),{flag:'wx'});console.log('Export created.');}
+ else throw new Error('Commands: action input.json | refresh-job Jnumber | outbox | requeue event-id | export new-file.json');
+}finally{s.close();}
