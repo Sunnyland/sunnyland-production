@@ -6,6 +6,7 @@ export const presses = ['HP Indigo 7900','Ryobi 755','Heidelberg SM52'];
 const kind = 'printPlanRun';
 const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 import {finishDay,validDay,hiddenJobs,observeDirectory} from './job-visibility.mjs';
+import {indigoDayOrder,sharesFinishing} from './indigo-sequence.mjs';
 export {finishDay} from './job-visibility.mjs';
 const normalized = s => s.trim().toLowerCase().replace(/\s+/g,' ');
 const optionalText = (value,label) => value === '' ? '' : str(value,label,160);
@@ -88,7 +89,9 @@ export function savePrintRun(store,actor,key,body,job) {
 export function sequencePressDay(rows) {
   const fixed=rows.filter(r=>r.fixedStart!==null).map(r=>({...r,start:r.fixedStart,end:r.fixedStart+r.minutes}));
   fixed.sort((a,b)=>a.start-b.start);
-  const auto=rows.filter(r=>r.fixedStart===null).sort((a,b)=>
+  const unfixed=rows.filter(r=>r.fixedStart===null);
+  // The Indigo groups paper and shared finishing (see indigo-sequence.mjs); other presses keep due-date order.
+  const auto=unfixed.length && unfixed.every(r=>r.press===indigo) ? indigoDayOrder(unfixed) : unfixed.sort((a,b)=>
     (a.due??'9999').localeCompare(b.due??'9999') ||
     (normalized(a.stock)||'\uffff').localeCompare(normalized(b.stock)||'\uffff') ||
     (normalized(a.finishes)||'\uffff').localeCompare(normalized(b.finishes)||'\uffff') ||
@@ -122,13 +125,15 @@ export function plantMinute(now) {
 export function choosePrintDay(run,bookings,now) {
   const today=finishDay(now.toISOString());
   need(validDay(run.due),'Set a required finish date or choose the print date manually.');
+  // Leave the run's finishing time before its due date when the agent has worked it out.
+  const deadline=validDay(run.latestPrintDay) && run.latestPrintDay<run.due ? run.latestPrintDay : run.due;
   if (run.press===indigo) need(run.minutes<=indigoBookableMinutes,indigoLimitMessage,409);
   const candidates=[];
   let atCapacity=false;
   const start=new Date(today+'T00:00:00Z');
   for(let offset=0,weekdays=0;weekdays<5;offset++){
     const date=new Date(start.getTime()+offset*86400000), day=date.toISOString().slice(0,10);
-    if(day>run.due)break;
+    if(day>deadline)break;
     if([0,6].includes(date.getUTCDay()))continue;
     weekdays++;
     const same=bookings.filter(r=>!r.removed && r.press===run.press && r.day===day && r.id!==run.id);
@@ -138,11 +143,12 @@ export function choosePrintDay(run,bookings,now) {
     if(placed.some(r=>r.start===null))continue;
     const eligible=same.filter(r=>day!==today || placed.find(p=>p.id===r.id)?.end>plantMinute(now));
     const stocks=eligible.filter(r=>normalized(run.stock) && normalized(r.stock)===normalized(run.stock));
-    const finishMatch=(stocks.length?stocks:eligible).some(r=>normalized(run.finishes) && normalized(r.finishes)===normalized(run.finishes));
+    const finishMatch=(stocks.length?stocks:eligible).some(r=>sharesFinishing(run,r));
     candidates.push({day,stock:stocks.length>0,finishes:finishMatch});
   }
   candidates.sort((a,b)=>Number(b.stock)-Number(a.stock)||Number(b.finishes)-Number(a.finishes)||a.day.localeCompare(b.day));
-  need(candidates.length,atCapacity?'No automatic slot fits by the required finish within the 80% Indigo booking limit.':'No automatic slot fits by the required finish in the next five weekdays. Choose another press or set a date and time.',409);
+  const by=deadline<run.due?'in time for its finishing before the due date':'by the required finish';
+  need(candidates.length,atCapacity?'No automatic slot fits '+by+' within the 80% Indigo booking limit.':'No automatic slot fits '+by+' in the next five weekdays. Choose another press or set a date and time.',409);
   return candidates[0].day;
 }
 

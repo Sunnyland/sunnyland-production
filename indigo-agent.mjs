@@ -4,6 +4,7 @@ import {readJob,jobSummary,printIQReadError} from './job-documents.mjs';
 import {samePrintIQJob} from './job-tickets.mjs';
 import {choosePrintDay,earliestPressStart,finishDay,indigoBookableMinutes} from './print-planning.mjs';
 import {operationEvidence,readRouting} from './production-finishes.mjs';
+import {byPriority,withFinishingPlan} from './indigo-sequence.mjs';
 
 const press='HP Indigo 7900', machine={id:'indigo-planning-agent'};
 const itemKind='indigoReadyRun', configKind='indigoPlannerConfig', runKind='printPlanRun';
@@ -48,13 +49,18 @@ function compute(store,observed,remote,facts,now){
     else if(inProgress.some(op=>samePrintIQJob(op.job,r.job) && (!r.operation || facts.operations.some(f=>f.id===r.operation && f.operationKey===String(op.printiqOperationKey)))))reason='An operator has already started this run';
     else if(!due)reason='Required finish date missing';
     else if(!reason && hasExistingRun(r,bookings))reason='Review an existing Indigo booking';
-    return {...r,due,day:null,reason};
-  }).sort(order);
+    return withFinishingPlan({...r,due,day:null,reason});
+  }).sort(byPriority);
   for(const row of rows){
     if(!row.reason && hasExistingRun(row,bookings))row.reason='Review an existing Indigo booking';
     if(row.reason)continue;
     try{
-      row.day=choosePrintDay({...row,press,fixedStart:null},bookings,now);
+      try{row.day=choosePrintDay({...row,press,fixedStart:null},bookings,now);row.finishingAtRisk=false;}
+      catch(e){
+        // No day leaves the full finishing time: take the earliest day before the due date and flag it.
+        if(!(e instanceof Fault) || !(row.latestPrintDay && row.latestPrintDay<row.due))throw e;
+        row.day=choosePrintDay({...row,press,fixedStart:null,latestPrintDay:null},bookings,now);row.finishingAtRisk=true;
+      }
       row.earliestStart=earliestPressStart(press,row.day,now);
       bookings.push({...row,press,fixedStart:null,agentRelease:true,agentOperation:row.operation});
     }catch(e){if(!(e instanceof Fault))throw e;row.reason=e.message;}

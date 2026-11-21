@@ -130,7 +130,8 @@ test('due date precedes stock and finishes under contention for a shift',async t
     await agent.control(manager,job,release(opts,job,{stock,finishes,operation:null,minutes:240}));
   }
   const rows=(await agent.dashboard()).rows;
-  assert.deepEqual(rows.map(r=>r.job),['J104','J103','J102','J101']);
+  // Equal deadlines: the run with more finishing goes first (Trim 120 min before Fold 60 min).
+  assert.deepEqual(rows.map(r=>r.job),['J104','J102','J103','J101']);
   assert.deepEqual(rows.map(r=>r.day),[day,null,null,'2026-11-24']);
   assert.ok(rows.filter(r=>!r.day).every(r=>r.reason.includes('80%')));
   await enable(agent);await agent.tick();assert.equal(s.all('printPlanRun').length,2);

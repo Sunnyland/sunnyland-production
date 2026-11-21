@@ -148,17 +148,21 @@ class Projection(unittest.TestCase):
                     {"operationKey":303,"quotedSectionKey":404,"acceptedSectionKey":505,"pressKey":64},
                     {"operationKey":304,"quotedSectionKey":406,"acceptedSectionKey":506,"pressKey":71}]}
         job='J064500'
-        remote={'Id':101,'QuotedProductDetailId':202,'DueDate':'2026-11-24'}
-        prod={'JobNo':job,'StatusName':'Preflight Ready','MiddlewareProductDetail':{'Sections':[
+        remote={'Id':101,'QuotedProductDetailId':606,'DueDate':'2026-11-24'}
+        prod={'JobNo':job,'StatusName':'Preflight Ready','QuantityKey':606,'MiddlewareProductDetail':{'Sections':[
             {'QQDSKey':404,'QPressKey':64,'QStockCode':'ABC','PrintedQStockSizeName':'320x450','PSTotalSheetsToPrint':500,
              'QPrsShortNameFront':'CMYK','QPrsShortNameReverse':'None'},
             {'QQDSKey':406,'QPressKey':71,'QStockCode':'OTHER','PSTotalSheetsToPrint':300}],
-            'Operations':[{'QQDSKey':404,'POOperationName':'Printing'},{'QQDSKey':404,'POOperationName':'Fold'},{'QQDSKey':406,'POOperationName':'Laminate'}]}}
+            'Operations':[{'QQDSKey':404,'POOperationName':'Printing'},{'QQDSKey':404,'POOperationName':'Fold'},{'QQDSKey':406,'POOperationName':'Laminate'},
+              {'QQDSKey':None,'POOperationName':'Handwork Glue'},{'QQDSKey':None,'POOperationName':'PDF Proof Prue Piez'},
+              {'QQDSKey':None,'POOperationName':'Base Charges - Applies to all jobs'},{'QQDSKey':None,'POOperationName':'Cartons'},
+              {'QQDSKey':404,'POOperationName':'Plate for Ryobi 754'},{'QQDSKey':None,'POOperationName':'Dispatch'}]}}
         raw=({'AcceptanceDetails':{'Products':[prod]}},'digest')
         def run(approval=True,risks=()):return m.project(job,remote,raw,{'approved':approval},risks,Cache,NOW)
         self.assertEqual(run(False)['runs'],[])
         self.assertEqual(run(True,[{'reason':'Check press output'}])['state'],'Check press output')
-        runs=run()['runs'];self.assertEqual(len(runs),1);self.assertEqual((runs[0]['stock'],runs[0]['finishes'],runs[0]['minutes']),('ABC 320x450','Fold',19))
+        runs=run()['runs'];self.assertEqual(len(runs),1);self.assertEqual((runs[0]['stock'],runs[0]['finishes'],runs[0]['minutes']),('ABC 320x450','Fold, Handwork Glue',19))
+        self.assertEqual(runs[0]['finishOps'],[{'name':'Fold'},{'name':'Handwork Glue'}])
         binding=runs[0]['operation']
         prod['JobNo']='064500'
         self.assertEqual(run()['runs'][0]['operation'],binding)

@@ -234,7 +234,8 @@ def project(job,remote,data,approval,risks,cache,now):
     if p["JobNo"]!=job:
         raw={**raw,"AcceptanceDetails":{**raw["AcceptanceDetails"],"Products":[{**p,"JobNo":job}]}}
     facts=cache.quantity_fields(raw,job,sha,now,"hourly-discovery")
-    if facts["acceptanceProductKey"]!=remote["Id"] or facts["productKey"]!=remote["QuotedProductDetailId"]:
+    # The Jobs list's QuotedProductDetailId is the accepted product's QuantityKey (not its ProductKey).
+    if facts["acceptanceProductKey"]!=remote["Id"] or p.get("QuantityKey")!=remote["QuotedProductDetailId"]:
         raise ValueError("Exact accepted product changed")
     status=str(p.get("StatusName") or p.get("Status") or "").strip().lower()
     result={"job":job,"printiqId":remote["Id"],"name":remote.get("JobTitle") or job,"due":remote.get("DueDate") or p.get("DueDate"),
@@ -258,13 +259,19 @@ def project(job,remote,data,approval,risks,cache,now):
         finishes=[]
         for o in mid["Operations"]:
             name=o.get("POOperationName") or o.get("QFinishingDescription") or o.get("QFinishingShortName")
-            if o.get("QQDSKey") not in [None,op["quotedSectionKey"]] or not name or name in {"Auto to Press","File Preflight","Imposition","Paper Stock Draw","Ink Stock Draw","Printing","Preflight","PROOFPDF"}:continue
+            if o.get("QQDSKey") not in [None,op["quotedSectionKey"]] or not name or NOT_FINISHING.search(name):continue
             if name not in finishes:finishes.append(name)
         minutes,issue=press_estimate(section)
         result["runs"].append({"id":str(uuid.uuid5(uuid.NAMESPACE_URL,"sunnyland:indigo:"+binding)),"operation":binding,"operationKey":str(op["operationKey"]),
             "part":section.get("PSSectionDescription") or "Section "+str(op["acceptedSectionKey"]),
-            "stock":" ".join(str(s) for s in (stock,size) if s) if stock else "","finishes":", ".join(finishes) or "None","minutes":minutes,"estimateIssue":issue})
+            "stock":" ".join(str(s) for s in (stock,size) if s) if stock else "","finishes":", ".join(finishes) or "None",
+            "finishOps":[{"name":n} for n in finishes],"minutes":minutes,"estimateIssue":issue})
     return result
+
+# Routing lines that are not finishing work after the press: prepress, stock draws, proofs, charges,
+# plates for other presses and dispatch. Everything else on the section or job counts as finishing.
+NOT_FINISHING=re.compile(r"^(auto to press|file preflight|preflight|imposition|paper stock draw|ink stock draw|printing|proofpdf|"
+    r"pdf proof|proof|base charges|invoicing|delivery|dispatch|cartons?|freight|courier|plate for)\b",re.I)
 
 APPROVED_NAMES={"artwork approved","proof approved","approved for print","approved for printing","approved for production"}
 FIELDS="Id,QuotedProductDetailId,JobNo,JobTitle,DueDate,CompletedDate,ProductionStatusId"

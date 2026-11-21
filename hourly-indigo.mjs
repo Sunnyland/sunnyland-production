@@ -3,6 +3,7 @@ import {printIQJobKey} from './job-tickets.mjs';
 import {openSync, closeSync, fstatSync, readFileSync, constants} from 'node:fs';
 import {choosePrintDay, earliestPressStart, finishDay, plantMinute, sequencePressDay} from './print-planning.mjs';
 import {Fault} from './core.mjs';
+import {byPriority,plannerSettings,withFinishingPlan} from './indigo-sequence.mjs';
 
 const kind='printPlanRun', marker='indigoHourlyScan', press='HP Indigo 7900', actor={id:'indigo-hourly-agent'};
 const path='/var/lib/sunnyland-production/indigo-hourly.json';
@@ -29,7 +30,9 @@ export function planHourly(store,feed,now=new Date()){
   if(!feed || now-Date.parse(feed.asOf)>2*3600000 || Date.parse(feed.generatedAt)>now.getTime()+60000)return;
   store.db.exec('BEGIN IMMEDIATE');
   try{
-    const enabled=store.get('indigoPlannerConfig','indigo')?.enabled===true;
+    const plannerConfig=store.get('indigoPlannerConfig','indigo');
+    const enabled=plannerConfig?.enabled===true;
+    const settings=plannerSettings(plannerConfig);
     const last=store.get(marker,'latest');
     if(last && (last.generatedAt>feed.generatedAt || (last.generatedAt===feed.generatedAt && (last.enabled || !enabled)))){
       store.db.exec('COMMIT');return;
@@ -66,8 +69,10 @@ export function planHourly(store,feed,now=new Date()){
         continue;
       }
       for(const item of job.runs){
-        const run={id:item.id,job:job.job,name:job.name,printiqId:job.printiqId,press,part:item.part,stock:item.stock,finishes:item.finishes,
-          minutes:item.minutes,due:finishDay(job.due),fixedStart:null,operationKey:item.operationKey,agentOperation:item.operation,agentRelease:true,hourly:true};
+        // Finishing time from printIQ sets the latest print day; only plain values are stored on the booking.
+        const {finishOps:_ops,...run}=withFinishingPlan({id:item.id,job:job.job,name:job.name,printiqId:job.printiqId,press,part:item.part,stock:item.stock,finishes:item.finishes,
+          minutes:item.minutes,due:finishDay(job.due),fixedStart:null,operationKey:item.operationKey,agentOperation:item.operation,agentRelease:true,hourly:true,
+          finishOps:Array.isArray(item.finishOps)?item.finishOps:undefined,finishingMinutes:item.finishingMinutes},settings);
         const locals=localJobs.filter(row=>jobKey(row.id)===job.job);
         let reason='';
         if(holds.has(job.job) || locals.some(local=>local.active===false || (local.printiqId && local.printiqId!==run.printiqId)))reason='Check local job status or hold';
@@ -81,12 +86,17 @@ export function planHourly(store,feed,now=new Date()){
         else pending.push(run);
       }
     }
-    pending.sort((a,b)=>a.due.localeCompare(b.due)||a.stock.localeCompare(b.stock)||a.finishes.localeCompare(b.finishes)||a.id.localeCompare(b.id));
+    pending.sort(byPriority);
     const published=[];
     for(const run of pending){
-      try{run.day=choosePrintDay(run,fixed,now);}catch(e){
+      try{run.day=choosePrintDay(run,fixed,now);run.finishingAtRisk=false;}catch(e){
         if(!(e instanceof Fault))throw e;
-        review.push({id:run.id,job:run.job,reason:e.message});continue;
+        // No day leaves the full finishing time: book the earliest day before the due date and flag it.
+        let day=null;
+        if(run.latestPrintDay && run.latestPrintDay<run.due){try{day=choosePrintDay({...run,latestPrintDay:null},fixed,now);}catch(again){if(!(again instanceof Fault))throw again;}}
+        if(!day){review.push({id:run.id,job:run.job,reason:e.message});continue;}
+        run.day=day;run.finishingAtRisk=true;
+        review.push({id:run.id,job:run.job,reason:'Booked '+day+', but that leaves less than the '+run.finishingDays+' working day'+(run.finishingDays===1?'':'s')+' of finishing printIQ estimates'});
       }
       run.earliestStart=earliestPressStart(press,run.day,now);
       fixed.push(run);published.push({id:run.id,job:run.job,part:run.part,day:run.day,press});

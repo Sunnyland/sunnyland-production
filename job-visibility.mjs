@@ -35,6 +35,14 @@ function annualHolidays(year){
   if([0,6].includes(date(12,26).getUTCDay()))add(12,28);
   return dates;
 }
+/// A Mildura plant working day: a weekday that is not a public holiday or a configured closure.
+export function isPlantWorkday(day){
+  if(!validDay(day))return false;
+  const date=new Date(day+'T00:00:00Z'),week=date.getUTCDay();
+  if(week===0||week===6)return false;
+  const closures=new Set((process.env.SUNNYLAND_PLANT_CLOSURES??'').split(',').map(s=>s.trim()));
+  return !annualHolidays(date.getUTCFullYear()).has(day) && !closures.has(day);
+}
 export function visibleFrom(now=new Date()){
   const date=new Date(finishDay(now.toISOString())+'T00:00:00Z');
   const closures=new Set((process.env.SUNNYLAND_PLANT_CLOSURES??'').split(',').map(s=>s.trim()));
