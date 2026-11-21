@@ -77,7 +77,7 @@ class Printed(unittest.TestCase):
                 db.executemany("INSERT INTO entries VALUES (?,?)", [(q, json.dumps(e)) for q, e in rows])
             tickets = {IP: p.parse_ticket((FIX / "J064238-IP0D-ticket.jdf").read_bytes()),
                        PP: {"sheets": {"100 Offset": 1}, "waste": {}, "separations": {"Black": 2}, "requested": 1, "status": "Completed"}}
-            snapshot, memo = p.collect(NOW, state=state, share=p.Share(str(share)), ticket=tickets.__getitem__, reader=FakeReader(), cache=FakeCache)
+            snapshot, memo = p.collect(NOW, state=state, share=p.Share(str(share)), ticket=tickets.__getitem__, reader=FakeReader(), cache=FakeCache, closed=set())
             self.assertEqual([j["job"] for j in snapshot["jobs"]], ["J064238"])
             job = snapshot["jobs"][0]
             self.assertEqual(job["printiq"]["quantity"], 1700)
@@ -91,9 +91,23 @@ class Printed(unittest.TestCase):
             # Second run within the hour: nothing read again.
             calls = FakeReader.calls
             again, _ = p.collect(NOW + timedelta(minutes=10), state=state, share=p.Share(str(share)),
-                                 ticket=lambda q: self.fail("ticket re-read"), reader=FakeReader(), cache=FakeCache, memo=memo)
+                                 ticket=lambda q: self.fail("ticket re-read"), reader=FakeReader(), cache=FakeCache, memo=memo, closed=set())
             self.assertEqual(FakeReader.calls, calls)
             self.assertEqual(again["jobs"][0]["entries"][1]["imposition"]["up"], 2)
+
+    def test_jobs_complete_in_printiq_are_never_read(self):
+        with tempfile.TemporaryDirectory() as d:
+            state = Path(d)
+            with sqlite3.connect(state / "observations.sqlite3") as db:
+                db.execute("CREATE TABLE entries(queue_id TEXT, entry_json TEXT)")
+                db.execute("INSERT INTO entries VALUES (?,?)", (IP, json.dumps({"nativeJobId": "064238", "status": "Completed", "submissionTime": "2026-11-11T09:45:41+11:00"})))
+            (state / "Jobs").mkdir()
+            (state / "feed.json").write_text(json.dumps({"visibility": [{"job": "J064238", "complete": True}], "jobs": []}))
+            closed = p.closed_jobs(state / "feed.json")
+            self.assertEqual(closed, {"J064238"})
+            snap, _ = p.collect(NOW, state=state, share=p.Share(str(state)), ticket=lambda q: self.fail("read a closed job"),
+                                reader=FakeReader(), cache=FakeCache, closed=closed)
+            self.assertEqual(snap["jobs"], [])
 
     def test_missing_imposition_is_retried_then_reported_missing(self):
         with tempfile.TemporaryDirectory() as d:
@@ -103,9 +117,9 @@ class Printed(unittest.TestCase):
                 db.execute("CREATE TABLE entries(queue_id TEXT, entry_json TEXT)")
                 db.execute("INSERT INTO entries VALUES (?,?)", (IP, json.dumps({"nativeJobId": "064238", "status": "Completed", "submissionTime": "2026-11-11T09:45:41+11:00"})))
             ticket = lambda q: {"sheets": {"x": 10}, "waste": {}, "separations": {}, "requested": 1}
-            s1, memo = p.collect(NOW, state=state, share=p.Share(str(share)), ticket=ticket, reader=FakeReader(), cache=FakeCache)
+            s1, memo = p.collect(NOW, state=state, share=p.Share(str(share)), ticket=ticket, reader=FakeReader(), cache=FakeCache, closed=set())
             self.assertEqual(s1["jobs"][0]["entries"][0]["impositionState"], "looking")
-            s2, memo = p.collect(NOW + timedelta(days=4), state=state, share=p.Share(str(share)), ticket=ticket, reader=FakeReader(), cache=FakeCache, memo=memo)
+            s2, memo = p.collect(NOW + timedelta(days=4), state=state, share=p.Share(str(share)), ticket=ticket, reader=FakeReader(), cache=FakeCache, memo=memo, closed=set())
             # Older than the lookback? No: 4 days later is still inside it, and the search has given up.
             self.assertEqual(s2["jobs"][0]["entries"][0]["impositionState"], "missing")
 
@@ -128,7 +142,7 @@ class Printed(unittest.TestCase):
                 db.execute("INSERT INTO entries VALUES (?,?)", (IP, json.dumps({"nativeJobId": "064238", "status": "Completed", "submissionTime": "2026-11-11T09:45:41+11:00"})))
             (state / "PTJobs" / "Jobs").mkdir(parents=True)
             snap, _ = p.collect(NOW, state=state, share=p.Share(str(state / "PTJobs")), ticket=lambda q: {"sheets": {"x": 3}, "separations": {}},
-                                reader=FakeReader(), cache=Odd)
+                                reader=FakeReader(), cache=Odd, closed=set())
             self.assertIn("TypeError", snap["jobs"][0]["printiq"]["error"])
 
     def test_one_recursive_smbclient_listing_finds_every_cockpit_jdf(self):

@@ -31,7 +31,7 @@ CACHE = Path("/var/lib/sunnyland-production/indigo-printed-cache.json")
 CENTER = os.environ.get("INDIGO_PRODUCTION_CENTER", "http://192.168.0.12:8080").rstrip("/")
 SHARE = os.environ.get("INDIGO_PTJOBS_SHARE", "//PPMS/PTJobs")
 AUTH = Path("/etc/sunnyland-production/indigo-ppms.smb")
-LOOKBACK_DAYS = 21
+LOOKBACK_DAYS = 10
 # Cockpit files a job under the day it was created; look this far back from the press submission.
 FOLDER_DAYS = 45
 # A missing imposition is looked for again after this long, and given up after GIVE_UP_DAYS.
@@ -314,6 +314,17 @@ def recent_entries(state, now):
     return [e for e in found if e["job"]]
 
 
+def closed_jobs(feed=src.FEED):
+    """Jobs the hourly scan found Complete (or Cancelled) in printIQ: nothing left to print, so never read again."""
+    try:
+        data = json.loads(Path(feed).read_text())
+    except (OSError, ValueError):
+        return set()
+    closed = {v["job"] for v in data.get("visibility", []) if isinstance(v, dict) and v.get("complete") is True and v.get("job")}
+    closed |= {j.get("job") for j in data.get("jobs", []) if isinstance(j, dict) and j.get("state") in ("complete", "cancelled")}
+    return {src.jobno(j) for j in closed if src.jobno(j)}
+
+
 def load_cache(path):
     try:
         data = json.loads(path.read_text())
@@ -322,10 +333,11 @@ def load_cache(path):
         return {"schema": 1, "tickets": {}, "impositions": {}, "jobs": {}}
 
 
-def collect(now, state=src.STATE, share=None, ticket=fetch_ticket, reader=None, cache=None, memo=None):
+def collect(now, state=src.STATE, share=None, ticket=fetch_ticket, reader=None, cache=None, memo=None, closed=None):
     memo = memo if memo is not None else {"schema": 1, "tickets": {}, "impositions": {}, "jobs": {}}
     health = {"center": {"ok": True, "reason": None}, "cockpit": {"ok": True, "reason": None}, "printiq": {"ok": True, "reason": None}}
-    entries = recent_entries(state, now)
+    closed = closed_jobs() if closed is None else closed
+    entries = [e for e in recent_entries(state, now) if e["job"] not in closed]
     listing, files = {}, {}
     started = datetime.now(timezone.utc)
     over = lambda: (datetime.now(timezone.utc) - started).total_seconds() > BUDGET_SECONDS
@@ -368,6 +380,8 @@ def collect(now, state=src.STATE, share=None, ticket=fetch_ticket, reader=None, 
         except cache.CacheError:
             reader, health["printiq"] = None, {"ok": False, "reason": "printIQ sign-in failed."}
     for job in jobs:
+        if over():
+            break
         held = memo["jobs"].get(job)
         if held and now - datetime.fromisoformat(held["readAt"]) < timedelta(minutes=ACCEPTANCE_MINUTES):
             continue
