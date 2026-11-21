@@ -342,7 +342,7 @@ def collect(now, state=src.STATE, share=None, ticket=fetch_ticket, reader=None, 
         if q not in memo["tickets"]:
             try:
                 memo["tickets"][q] = ticket(q)
-            except (OSError, ValueError, ET.ParseError) as error:
+            except (OSError, ValueError, ET.ParseError, TypeError, AttributeError) as error:
                 health["center"] = {"ok": False, "reason": "Production Center press tickets could not be read (" + type(error).__name__ + ")."}
         known = memo["impositions"].get(q)
         retry = known and known.get("missingSince") and now - datetime.fromisoformat(known["checkedAt"]) >= timedelta(hours=RETRY_HOURS) \
@@ -352,8 +352,12 @@ def collect(now, state=src.STATE, share=None, ticket=fetch_ticket, reader=None, 
                 found = read_imposition(share, e["job"], q, e["submitted"], listing, files)
                 memo["impositions"][q] = {"found": found, "checkedAt": now.isoformat(),
                                           "missingSince": None if found else (known or {}).get("missingSince") or now.isoformat()}
-            except (OSError, ValueError, ET.ParseError) as error:
-                health["cockpit"] = {"ok": False, "reason": str(error) if isinstance(error, OSError) else "A Cockpit JDF could not be read."}
+            except (OSError, ValueError, ET.ParseError, TypeError, AttributeError, KeyError) as error:
+                if isinstance(error, OSError):
+                    health["cockpit"] = {"ok": False, "reason": str(error)}
+                else:
+                    # One unreadable JDF: record it for this entry and carry on.
+                    memo["impositions"][q] = {"found": None, "checkedAt": now.isoformat(), "missingSince": now.isoformat(), "error": type(error).__name__}
     jobs = sorted({e["job"] for e in entries})
     if jobs and reader is None:
         sys.path.insert(0, "/opt/sunnyland-printiq-requirements")
@@ -371,8 +375,8 @@ def collect(now, state=src.STATE, share=None, ticket=fetch_ticket, reader=None, 
             continue
         try:
             memo["jobs"][job] = acceptance(reader, cache, job, now)
-        except (ValueError, KeyError, StopIteration) as error:
-            memo["jobs"][job] = {"error": str(error) if isinstance(error, ValueError) else "Accepted routing unavailable",
+        except (ValueError, KeyError, StopIteration, TypeError, AttributeError, IndexError) as error:
+            memo["jobs"][job] = {"error": str(error) if type(error) is ValueError else "Accepted routing unavailable (" + type(error).__name__ + ")",
                                  "readAt": now.isoformat(), "sections": []}
         except Exception as error:  # noqa: BLE001 - printIQ outage: keep the last answer
             if cache and isinstance(error, cache.CacheError):
@@ -401,7 +405,7 @@ def collect(now, state=src.STATE, share=None, ticket=fetch_ticket, reader=None, 
 
 
 def write_private(path, data, group):
-    payload = json.dumps(data, separators=(",", ":"), allow_nan=False).encode()
+    payload = json.dumps(data, separators=(",", ":"), allow_nan=False, default=str).encode()
     if len(payload) > 16 * 1024 * 1024:
         raise ValueError("Printed snapshot exceeds bounds")
     with tempfile.NamedTemporaryFile(dir=path.parent, prefix=".indigo-printed-", delete=False) as out:
@@ -440,5 +444,8 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as error:  # noqa: BLE001
-        print("Indigo printed check failed (" + type(error).__name__ + "). Previous snapshot retained.", file=sys.stderr)
+        import traceback
+        frame = traceback.extract_tb(error.__traceback__)[-1]
+        print("Indigo printed check failed (" + type(error).__name__ + " at " + Path(frame.filename).name + " line " + str(frame.lineno) +
+              "). Previous snapshot retained.", file=sys.stderr)
         sys.exit(1)

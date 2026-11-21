@@ -116,6 +116,35 @@ class Printed(unittest.TestCase):
         spaced = "  064193 A2 Corflutes - Merbein C Park      D        0  Tue Nov 10 10:00:00 2026"
         self.assertEqual(p.Share.LINE.match(spaced)[1], "064193 A2 Corflutes - Merbein C Park")
 
+    def test_an_odd_printiq_product_is_recorded_not_fatal(self):
+        class Odd(FakeCache):
+            @staticmethod
+            def quantity_fields(*args):
+                raise TypeError("banner product")
+        with tempfile.TemporaryDirectory() as d:
+            state = Path(d)
+            with sqlite3.connect(state / "observations.sqlite3") as db:
+                db.execute("CREATE TABLE entries(queue_id TEXT, entry_json TEXT)")
+                db.execute("INSERT INTO entries VALUES (?,?)", (IP, json.dumps({"nativeJobId": "064238", "status": "Completed", "submissionTime": "2026-11-11T09:45:41+11:00"})))
+            (state / "PTJobs" / "Jobs").mkdir(parents=True)
+            snap, _ = p.collect(NOW, state=state, share=p.Share(str(state / "PTJobs")), ticket=lambda q: {"sheets": {"x": 3}, "separations": {}},
+                                reader=FakeReader(), cache=Odd)
+            self.assertIn("TypeError", snap["jobs"][0]["printiq"]["error"])
+
+    def test_one_recursive_smbclient_listing_finds_every_cockpit_jdf(self):
+        listing = "\n".join(["Domain=[PPMS]", "\\Jobs\\2026-11-11\\064238\\RendererReports\\FSWDS",
+            f"  D7_{PP}_in.jdf      A    59450  Wed Nov 11 08:53:46 2026", "",
+            "\\Jobs\\2026-11-11\\064238\\RendererReports\\Imposed sheet_1",
+            f"  D7_{IP}_in.jdf      A    58789  Wed Nov 11 09:45:42 2026"])
+
+        class Smb(p.Share):
+            def __init__(self): self.root = None
+            def _smb(self, commands, timeout=30): return listing
+
+        files = Smb().cockpit_files("Jobs/2026-11-11/064238/RendererReports")
+        self.assertEqual(files[f"D7_{IP}_in.jdf"], f"Jobs/2026-11-11/064238/RendererReports/Imposed sheet_1/D7_{IP}_in.jdf")
+        self.assertEqual(len(files), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
