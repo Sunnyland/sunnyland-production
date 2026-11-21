@@ -45,7 +45,7 @@ Sunnyland Press, Mildura VIC (Australia/Melbourne time). Owner: Paul Cocks.
 
 ## State on 21 Nov 2026
 - Installed on PrintCRM: state sync, Indigo planner, **Indigo agent alerts** (10-min watch).
-- **Printed check: NOT installed yet.** Latest installer: `PrintCRM/Indigo-Printed-Check-deploy.txt` (patch 0b9b6dc → HEAD).
+- **Printed check: NOT installed yet.** Latest installer: `PrintCRM/Indigo-Printed-Check-deploy.txt` (patch 0b9b6dc → 2323efb).
   The first attempt rolled back on a TypeError in a real job (now caught per job/entry, and failures name the line).
   After install, verify: `journalctl -u sunnyland-indigo-printed.service -n 5`, and
   `python3 -B /opt/sunnyland-indigo-hourly/indigo_printed.py --check 82f36c7615b14a0f9cadc4b3be1de4af`
