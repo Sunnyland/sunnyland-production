@@ -178,16 +178,23 @@ SETUP_MINUTES = 10
 def process_name(value):
     return " ".join(str(value or "").casefold().replace("-", " ").replace("color", "colour").split())
 
+def indigo_sheet(short, long):
+    # The 7900 prints any sheet from SRA3 (320 × 450) up to its 330 × 482 maximum at the same rated speed,
+    # including pre-trim sizes such as 324 × 454.
+    return 320 <= short <= 330 and 450 <= long <= 482
+
 def sra3_section(section):
     name = str(section.get("PrintedQStockSizeName") or "").strip().casefold()
-    dims = re.fullmatch(r"(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(?:mm)?", name)
-    named_sra3 = name == "sra3" or bool(dims and sorted(map(float, dims.groups())) == [320, 450])
+    dims = re.match(r"(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(?:mm)?(?:\s+pre[ -]?trim)?$", name)
+    named_sra3 = name == "sra3" or bool(dims and indigo_sheet(*sorted(map(float, dims.groups()))))
     width, depth = (section.get(key) for key in ("PrintedStockSheetWidth", "PrintedStockSheetDepth"))
     if width is None and depth is None:
         return named_sra3
     if not all(isinstance(d, dict) and type(d.get("mm")) in (int, float) for d in (width, depth)):
         return False
-    return sorted((width["mm"], depth["mm"])) == [320, 450] and (not dims or named_sra3)
+    measured = sorted((width["mm"], depth["mm"]))
+    # A named size and measured sheet must agree.
+    return indigo_sheet(*measured) and (not dims or sorted(map(float, dims.groups())) == measured)
 
 def side_rate(section, side):
     labels = {process_name(section.get("QPrs" + key + side)) for key in ("ShortName", "Description")} - {""}
@@ -270,8 +277,8 @@ def project(job,remote,data,approval,risks,cache,now):
 
 # Routing lines that are not finishing work after the press: prepress, stock draws, proofs, charges,
 # plates for other presses and dispatch. Everything else on the section or job counts as finishing.
-NOT_FINISHING=re.compile(r"^(auto to press|file preflight|preflight|imposition|paper stock draw|ink stock draw|printing|proofpdf|"
-    r"pdf proof|proof|base charges|invoicing|delivery|dispatch|cartons?|freight|courier|plate for)\b",re.I)
+NOT_FINISHING=re.compile(r"^printing$|\b(auto to press|preflight|imposition|stock draw|proof|base charges|invoic|delivery|dispatch|"
+    r"cartons?|freight|courier|plate for|concept|design|layout|artwork|die library|no guillo)",re.I)
 
 APPROVED_NAMES={"artwork approved","proof approved","approved for print","approved for printing","approved for production"}
 FIELDS="Id,QuotedProductDetailId,JobNo,JobTitle,DueDate,CompletedDate,ProductionStatusId"

@@ -120,8 +120,24 @@ class Speeds(unittest.TestCase):
         self.assertEqual(m.press_estimate(self.section(PrintedQStockSizeName="", **measured)), (27, None))
         for data in ({"PrintedQStockSizeName":"SRA2"}, {"PrintedQStockSizeName":None},
                      {"PrintedQStockSizeName":"320x460", **measured},
-                     {"PrintedStockSheetWidth":{"mm":320}, "PrintedStockSheetDepth":{"mm":460}}):
+                     {"PrintedStockSheetWidth":{"mm":340}, "PrintedStockSheetDepth":{"mm":460}},
+                     {"PrintedQStockSizeName":"330x490"}):
             self.assertIsNone(m.press_estimate(self.section(**data))[0])
+
+    def test_pre_trim_sheets_up_to_the_indigo_maximum_use_the_same_rate(self):
+        for name in ("324x454 Pre Trim", "480x320 Pre Trim", "330 x 482 mm"):
+            self.assertEqual(m.press_estimate(self.section(PrintedQStockSizeName=name)), (27, None))
+        pre = dict(PrintedStockSheetWidth={"mm":324}, PrintedStockSheetDepth={"mm":454})
+        self.assertEqual(m.press_estimate(self.section(PrintedQStockSizeName="324x454 Pre Trim", **pre)), (27, None))
+        self.assertIsNone(m.press_estimate(self.section(PrintedQStockSizeName="320x450", **pre))[0])
+
+    def test_only_finishing_work_counts_as_finishing(self):
+        for name in ("Local Delivery", "No Guillo", "Concept, Design and Layout x0.5 hours", "Die Library", "PDF Proof Prue Piez",
+                     "Base Charges - Applies to all jobs", "Invoicing fee", "Printing", "Plate for Ryobi 754", "Paper Stock Draw"):
+            self.assertTrue(m.NOT_FINISHING.search(name), name)
+        for name in ("Guillotine", "Guillotine Pre-Trim", "Gloss Laminate", "Handwork Staple", "Machine Collate", "Perforation ",
+                     "Numbers from  17301", "Diecut using library die", "Saddle Stitch (flat Sheet)", "Drill", "Drying"):
+            self.assertFalse(m.NOT_FINISHING.search(name), name)
 
     def test_unknown_special_missing_and_conflicting_inputs(self):
         for data in ({"QPrsShortNameFront":"CMYK + White"}, {"QPrsShortNameFront":"3 colours"},

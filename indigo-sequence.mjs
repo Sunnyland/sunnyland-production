@@ -16,13 +16,14 @@ export const finishingDefaults = {
   finishingMinutesPerDay: 450,
   // Used when an operation has no printIQ time and matches no standard below.
   fallbackMinutesPerOperation: 120,
-  // Standard minutes per finishing operation, matched by the start of the printIQ operation name
-  // (longest match wins). printIQ's own estimates replace these when its Operations data is available.
+  // Standard minutes per finishing operation, matched anywhere in the printIQ operation name
+  // (longest match wins, so "Guillotine Pre-Trim" beats "Guillotine"). printIQ's own estimates replace these when its Operations data is available.
   // A manager can override any of them in the planner settings.
   finishingStandards: {
     'guillotine pre-trim': 20, 'guillotine': 30, 'drying': 60, 'laminat': 120, 'fold': 60, 'crease': 60, 'score': 45,
     'handwork': 240, 'perfect bind': 240, 'saddle stitch': 120, 'stitch': 120, 'drill': 30, 'hole punch': 30,
-    'round corner': 30, 'collat': 60, 'die cut': 120, 'kiss cut': 120, 'shrink wrap': 30, 'numbering': 60, 'padding': 120
+    'round corner': 30, 'collat': 60, 'die cut': 120, 'diecut': 120, 'kiss cut': 120, 'shrink wrap': 30, 'number': 60,
+    'padding': 120, 'perforat': 45, 'staple': 60
   }
 };
 const normalized = s => String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -37,7 +38,7 @@ export function operationMinutes(op, settings = finishingDefaults) {
   if (Number.isFinite(op?.minutes) && op.minutes >= 0) return op.minutes;
   const name = normalized(op?.name ?? op);
   const standards = settings.finishingStandards ?? finishingDefaults.finishingStandards;
-  const match = Object.keys(standards).filter(key => name.startsWith(normalized(key))).sort((a, b) => b.length - a.length)[0];
+  const match = Object.keys(standards).filter(key => name.includes(normalized(key))).sort((a, b) => b.length - a.length)[0];
   return match ? standards[match] : settings.fallbackMinutesPerOperation;
 }
 /// Total finishing minutes for a run.

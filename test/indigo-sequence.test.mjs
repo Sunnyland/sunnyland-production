@@ -18,6 +18,11 @@ test('finishing minutes come from printIQ times, with a fallback only for untime
   assert.equal(finishingMinutes({finishOps: [{name: 'Guillotine Pre-Trim'}, {name: 'Guillotine'}, {name: 'Handwork Glue'}]}), 290);
   assert.equal(finishingMinutes({finishOps: [{name: 'Guillotine'}]}, plannerSettings({finishingStandards: {Guillotine: 45}})), 45);
   assert.equal(plannerSettings({finishingStandards: {Fold: -5}}).finishingStandards.fold, 60);
+  // Names as printIQ writes them on current Indigo jobs.
+  assert.equal(finishingMinutes({finishOps: [{name: 'Gloss Laminate'}, {name: 'Machine Collate'}, {name: 'Diecut using Platten / 35'},
+    {name: 'Numbers from  17301'}, {name: 'Perforation '}, {name: 'Saddle Stitch (flat Sheet)'}]}), 120 + 60 + 120 + 60 + 45 + 120);
+  // "Handwork Staple" is handwork (longest match), not a plain staple.
+  assert.equal(finishingMinutes({finishOps: [{name: 'Handwork Staple'}]}), 240);
   assert.equal(finishingMinutes({finishes: 'None'}), 0);
   assert.equal(finishingLeadDays({finishOps: [{name: 'Trim', minutes: 20}]}), 1);
   assert.equal(finishingLeadDays({finishOps: [{name: 'Perfect bind', minutes: 900}]}), 2);
