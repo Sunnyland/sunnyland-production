@@ -45,12 +45,16 @@ Sunnyland Press, Mildura VIC (Australia/Melbourne time). Owner: Paul Cocks.
 
 ## State on 21 Nov 2026
 - Installed on PrintCRM: state sync, Indigo planner, **Indigo agent alerts** (10-min watch).
-- **Printed check: NOT installed yet.** Latest installer: `PrintCRM/Indigo-Printed-Check-deploy.txt` (patch 0b9b6dc → 2323efb).
-  The first attempt rolled back on a TypeError in a real job (now caught per job/entry, and failures name the line).
-  After install, verify: `journalctl -u sunnyland-indigo-printed.service -n 5`, and
+- **Printed check: installed, DRY RUN** (plus `Indigo-Printed-Faster-deploy.txt`: skips jobs complete in printIQ, 10-day
+  lookback, 4-minute budget per run; the app copy is at 056520a). Verify: `journalctl -u sunnyland-indigo-printed.service -n 5`, and
   `python3 -B /opt/sunnyland-indigo-hourly/indigo_printed.py --check 82f36c7615b14a0f9cadc4b3be1de4af`
   (J064238: 870 sheets on 113gsm Sovereign Silk, 2-up, 850 needed, printIQ routes it to the Ryobi W/T → needs confirming).
-- iOS: "Needs confirming" screen added to `PrintPlanning.swift` (IndigoPrintedSections, PrintedConfirmView): **not yet compiled**.
+- iOS: "Needs confirming" screen in `PrintPlanning.swift` (IndigoPrintedSections, PrintedConfirmView): builds (1 warning to tidy).
+- **PrintCRM (= MISweb, Next.js, `/srv/print-crm`, owned by root) has drifted three ways**: GitHub `main` stops at 646bc1d
+  (7 Oct); the Mac copy `~/Development/mis-web` has 1,094 commits on top (to 15 Oct, never pushed); the server has 29 other
+  commits + 204 uncommitted files (to ~7 Nov). The server's live work is backed up on GitHub as branch
+  `server-live-2026-11-21` (storage/, public/uploads/, logs/, tmp/ excluded). Next: combine into one `main`; then
+  Mac → GitHub → server only. `sunnyland-production` has no GitHub remote yet (create a private repo).
 
 ## Next (agreed)
 1. **Production board** for a Raspberry Pi screen at the press (Debian, Chromium kiosk; IP not known yet) + the same statuses in
