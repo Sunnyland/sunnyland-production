@@ -127,6 +127,7 @@ export function jobNoteLines(event) {
     return [`Operation: ${event.name} · ${event.location}`, `Timer: ${event.state} · ${minutes}m ${seconds}s accumulated`,
       ...(event.printiqOperationKey ? [`printIQ operation ID: ${event.printiqOperationKey}`] : []), `Recorded at: ${event.updatedAt}`, ...(event.state === 'completed' ? [`Good: ${event.good} · Waste: ${event.waste} ${event.unit}`] : [])];
   }
+  if (event.kind === 'indigo_printed' && Array.isArray(event.lines)) return event.lines.map(String);
   if (['sample_submitted','sample_decision'].includes(event.kind)) {
     return [`Folding sample: ${event.title} · version ${event.version}`, `Approval: ${event.state}`,
       ...(event.operationName ? [`Operation: ${event.operationName}`] : []),

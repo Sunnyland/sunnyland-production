@@ -1,0 +1,11 @@
+[Unit]
+Description=Check what the Indigo printed every 10 minutes
+
+[Timer]
+OnCalendar=*:5/10
+Persistent=true
+AccuracySec=30s
+Unit=sunnyland-indigo-printed.service
+
+[Install]
+WantedBy=timers.target

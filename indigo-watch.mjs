@@ -126,38 +126,46 @@ export function watchAlerts({watch, feed, config = {}, now = new Date()}) {
   return {alerts, status};
 }
 
-/// Queues the alerts (each key once) and records the latest status for the app.
-export function applyWatch(store, {watch, feed, now = new Date()}) {
-  prepareProductionAlerts(store);
-  const config = store.get('indigoPlannerConfig', 'indigo') ?? {};
-  const {alerts, status} = watchAlerts({watch, feed, config, now});
+/// Queues alert emails (and iPhone pushes for alerts marked push) for production managers, prepress and reps.
+/// Each alert key goes to each address once. Call inside a transaction.
+export function queueProductionAlerts(store, alerts, config = {}) {
   const users = store.all('user').filter(u => u.enabled);
   const managers = users.filter(u => u.role === 'manager');
   const managerEmails = managers.map(u => u.email).filter(e => email.test(e));
   const prepress = (Array.isArray(config.prepressEmails) ? config.prepressEmails : []).filter(e => typeof e === 'string' && email.test(e));
   const sent = [];
-  store.db.exec('BEGIN IMMEDIATE');
-  try {
-    for (const alert of alerts) {
-      const to = new Set(alert.audience === 'rep' ? [alert.rep.email] :
-        alert.audience === 'rep+managers' ? [alert.rep?.email, ...managerEmails] :
-        alert.audience === 'prepress' || alert.audience === 'operations' ? [...prepress, ...managerEmails] : managerEmails);
-      for (const address of [...to].filter(Boolean)) {
-        const id = 'indigo-agent:' + alert.key + ':' + address.toLowerCase();
-        if (store.db.prepare('SELECT 1 FROM outbox WHERE id=?').get(id)) continue;
-        store.queue('mail', alert.job ?? 'indigo-agent', {to: address, kind: 'production_alert', job: alert.job ?? 'Indigo', subject: alert.subject, text: alert.text}, id);
-        sent.push({key: alert.key, to: address});
-      }
-      if (alert.push) {
-        for (const manager of managers) {
-          for (const device of store.db.prepare('SELECT binding FROM push_devices WHERE actor=?').all(manager.id)) {
-            store.db.prepare('INSERT OR IGNORE INTO production_alerts (id,actor,binding,title,body,due) VALUES (?,?,?,?,?,?)')
-              .run('indigo-agent:' + alert.key + ':' + device.binding, manager.id, device.binding, alert.subject.slice(0, 120),
-                alert.text.split('\n').find(Boolean)?.slice(0, 200) ?? '', Date.now());
-          }
+  for (const alert of alerts) {
+    const to = new Set(alert.audience === 'rep' ? [alert.rep.email] :
+      alert.audience === 'rep+managers' ? [alert.rep?.email, ...managerEmails] :
+      alert.audience === 'prepress' || alert.audience === 'operations' ? [...prepress, ...managerEmails] : managerEmails);
+    for (const address of [...to].filter(Boolean)) {
+      const id = 'indigo-agent:' + alert.key + ':' + address.toLowerCase();
+      if (store.db.prepare('SELECT 1 FROM outbox WHERE id=?').get(id)) continue;
+      store.queue('mail', alert.job ?? 'indigo-agent', {to: address, kind: 'production_alert', job: alert.job ?? 'Indigo', subject: alert.subject, text: alert.text}, id);
+      sent.push({key: alert.key, to: address});
+    }
+    if (alert.push) {
+      for (const manager of managers) {
+        for (const device of store.db.prepare('SELECT binding FROM push_devices WHERE actor=?').all(manager.id)) {
+          store.db.prepare('INSERT OR IGNORE INTO production_alerts (id,actor,binding,title,body,due) VALUES (?,?,?,?,?,?)')
+            .run('indigo-agent:' + alert.key + ':' + device.binding, manager.id, device.binding, alert.subject.slice(0, 120),
+              alert.text.split('\n').find(Boolean)?.slice(0, 200) ?? '', Date.now());
         }
       }
     }
+  }
+  return sent;
+}
+
+/// Queues the alerts (each key once) and records the latest status for the app.
+export function applyWatch(store, {watch, feed, now = new Date()}) {
+  prepareProductionAlerts(store);
+  const config = store.get('indigoPlannerConfig', 'indigo') ?? {};
+  const {alerts, status} = watchAlerts({watch, feed, config, now});
+  store.db.exec('BEGIN IMMEDIATE');
+  let sent;
+  try {
+    sent = queueProductionAlerts(store, alerts, config);
     store.put('indigoWatch', {id: 'latest', checkedAt: now.toISOString(), watchGeneratedAt: watch?.generatedAt ?? null, ...status,
       alerts: alerts.map(a => ({key: a.key, subject: a.subject})).slice(0, 50)});
     store.db.exec('COMMIT');

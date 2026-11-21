@@ -6,6 +6,7 @@ import {choosePrintDay,earliestPressStart,finishDay,indigoBookableMinutes} from 
 import {operationEvidence,readRouting} from './production-finishes.mjs';
 import {byPriority,withFinishingPlan} from './indigo-sequence.mjs';
 import {applyWatch,readWatch} from './indigo-watch.mjs';
+import {applyPrinted,decidePrinted,printedDashboard,printedModes,readPrinted} from './indigo-printed.mjs';
 
 const press='HP Indigo 7900', machine={id:'indigo-planning-agent'};
 const itemKind='indigoReadyRun', configKind='indigoPlannerConfig', runKind='printPlanRun';
@@ -69,7 +70,7 @@ function compute(store,observed,remote,facts,now){
   return rows;
 }
 
-export function indigoPlanner(store,iq,{routing=()=>readRouting(),clock=()=>new Date(),hourly=readHourlyFeed,watch=readWatch}={}){
+export function indigoPlanner(store,iq,{routing=()=>readRouting(),clock=()=>new Date(),hourly=readHourlyFeed,watch=readWatch,printed=readPrinted}={}){
   let busy=false, lastError=null,lastCheck=null;
   const waiting=()=>store.all(itemKind).filter(r=>r.state==='waiting');
   const retry=(actor,key,body,fn)=>store.transaction(actor,key,{indigoPlanner:body},fn);
@@ -110,6 +111,14 @@ export function indigoPlanner(store,iq,{routing=()=>readRouting(),clock=()=>new 
         need(row.state==='waiting','This run is already published or withdrawn. Refresh the board.',409);
         row.state='withdrawn';store.put(itemKind,row);store.audit(actor,'withdraw_indigo_release',row.id,{job:row.job});
         return row;
+      }
+      if(body.action==='printed')return decidePrinted(store,actor,body,{now:clock()});
+      if(body.action==='printedMode'){
+        // dryRun: record what would be written to printIQ; live: write the note and finish the Printing operation; off: stop.
+        need(printedModes.includes(body.mode),'Choose off, dry run or live.');
+        const c=config(store);need(body.revision===c.revision,'Planner settings changed. Refresh first.',409);
+        const next={...c,printedMode:body.mode,revision:c.revision+1};store.put(configKind,next);
+        store.audit(actor,'configure_indigo_printed','indigo',{printedMode:body.mode});return next;
       }
       if(body.action==='prepress'){
         // The people told about prepress problems (a job not reaching the Indigo, unnumbered queue entries, connection failures).
@@ -165,12 +174,15 @@ export function indigoPlanner(store,iq,{routing=()=>readRouting(),clock=()=>new 
     // Approval reminders and press-queue alerts run even when printIQ is briefly unavailable.
     try{applyWatch(store,{watch:watch(),feed:feed??hourly(),now:clock()});}
     catch{lastError=(lastError?lastError+' ':'')+'Could not check approvals and the Indigo queue.';}
+    // What the Indigo printed: proofs, part printed, printed (written to printIQ) or needs confirming.
+    try{applyPrinted(store,{snapshot:printed(),now:clock(),facts:routing()});}
+    catch{lastError=(lastError?lastError+' ':'')+'Could not check what the Indigo printed.';}
     finally{busy=false;lastCheck=clock().toISOString();}
   }
   async function dashboard(){
     let rows,problem=lastError;
     try{rows=await evaluate(false);}catch{rows=waiting().map(r=>({...r,day:null,reason:'Live job lookup unavailable'}));problem='Could not refresh printIQ jobs.';}
-    return {...config(store),rows,lastCheck,problem,hourly:hourlySummary(store,clock()),watch:store.get('indigoWatch','latest')??null,scheduled:store.all(itemKind).filter(r=>r.state==='scheduled' &&
+    return {...config(store),rows,lastCheck,problem,hourly:hourlySummary(store,clock()),watch:store.get('indigoWatch','latest')??null,printed:printedDashboard(store,clock()),scheduled:store.all(itemKind).filter(r=>r.state==='scheduled' &&
       store.get(runKind,r.id)?.removed!==true).slice(-12).reverse().map(r=>{const run=store.get(runKind,r.id);return {...r,day:run?.day,press:run?.press};})};
   }
   return {control,tick,dashboard,routing};

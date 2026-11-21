@@ -1,0 +1,18 @@
+[Unit]
+Description=Read what the Indigo printed (press tickets, Prinect imposition, printIQ sections) for the production agent
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=sunnyland-production
+UMask=0027
+EnvironmentFile=-/etc/sunnyland-production/indigo-hourly.conf
+ExecStart=/usr/bin/python3 -B /opt/sunnyland-indigo-hourly/indigo_printed.py
+TimeoutStartSec=8min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/sunnyland-production

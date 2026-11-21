@@ -1,0 +1,547 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<JDF HDM:Cluster="HP Indigo 7900 on PPMS" HDM:GuessedTime="100.0" HDM:HiddenStepIDs="Im Tr"
+  HDM:StepIDs="Im P" HDM:ToolID="D" HDM:ToolType="DigitalPagePrinter"
+  ID="Link_261111_085228572_001439" JobID="064238" JobPartID="PP0.D" MaxVersion="1.3"
+  SpawnID="Sp_261111_085344968_059436" Status="Part" Type="Combined"
+  Types="Imposition DigitalPrinting" Version="1.3" xmlns="http://www.CIP4.org/JDFSchema_1_1"
+  xmlns:EV="http://www.engview.com/schema/EV" xmlns:HDM="www.heidelberg.com/schema/HDM" xmlns:pt="PT:Config1.0">
+  <ResourcePool>
+    <NodeInfo Class="Parameter" ID="Link_261111_085228573_001440" NaturalLang="en"
+      NodeStatus="Waiting" PartIDKeys="Run" PartUsage="Implicit" Status="Available">
+      <NodeInfo HDM:WorkstepName="PL_W2PLayout" JobPriority="50" NodeStatus="Waiting"
+        Run="Run_261111_085342756_001581" SpawnIDs="Sp_261111_085344968_059436" WorkStepID="_261111_085342757_001583">
+        <MISDetails CostType="Chargeable" WorkType="Original"/>
+      </NodeInfo>
+    </NodeInfo>
+    <HDM:ImposerParams Class="Parameter" HDM:PDFWriteMode="FilePerLayout" HDM:RemoveMarks="false"
+      HDM:RemovePS="false" ID="Link_261111_085228572_001432" Locked="true" Status="Available"/>
+    <ColorantControl Class="Parameter" HDM:Submitted="true" ID="Link_261111_085228592_001445"
+      Locked="true" PartUsage="Implicit" ProcessColorModel="DeviceCMYK" Status="Available" rRefs="Link_231117_131506198_000069">
+      <ColorantOrder>
+        <SeparationSpec Name="Black"/>
+        <SeparationSpec Name="Cyan"/>
+        <SeparationSpec Name="Magenta"/>
+        <SeparationSpec Name="Yellow"/>
+        <SeparationSpec Name="ProofColor"/>
+      </ColorantOrder>
+      <ColorantParams>
+        <SeparationSpec Name="ProofColor"/>
+        <SeparationSpec Name="B"/>
+        <SeparationSpec Name="C"/>
+        <SeparationSpec Name="M"/>
+        <SeparationSpec Name="Y"/>
+        <SeparationSpec Name="X"/>
+        <SeparationSpec Name="Z"/>
+        <SeparationSpec Name="U"/>
+        <SeparationSpec Name="V"/>
+        <SeparationSpec Name="S1"/>
+        <SeparationSpec Name="S2"/>
+        <SeparationSpec Name="S3"/>
+        <SeparationSpec Name="S4"/>
+        <SeparationSpec Name="S5"/>
+        <SeparationSpec Name="S6"/>
+        <SeparationSpec Name="S7"/>
+        <SeparationSpec Name="S8"/>
+        <SeparationSpec Name="L1"/>
+        <SeparationSpec Name="L2"/>
+        <SeparationSpec Name="L3"/>
+        <SeparationSpec Name="L4"/>
+      </ColorantParams>
+      <ColorPoolRef rRef="Link_231117_131506198_000069"/>
+    </ColorantControl>
+    <ColorPool Class="Parameter" HDM:AutoMarks="Automatic" HDM:ColorDefinition="ColorTable"
+      HDM:SpotToBCMY="true" ID="Link_231117_131506198_000069" Locked="true" Status="Available">
+      <Color CMYK="0 0 0 1" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="Black" NeutralDensity="1.67" UsePDLAlternateCS="false"/>
+      <Color CMYK="1 0 0 0" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="Cyan" NeutralDensity="0.51" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 1 0 0" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="Magenta" NeutralDensity="0.62" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 1 0" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="Yellow" NeutralDensity="0.04" UsePDLAlternateCS="false"/>
+      <Color CMYK="0.79215686 0 0.44313725 0.20784314" ColorBook="Sunnyland" ColorType="DieLine"
+        HDM:OverPrint="OverPrint" HDM:Purpose="Tool" HDM:UseColorTable="true"
+        MappingSelection="UseProcessColorValues" Name="ProofColor" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="B" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="C" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="M" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="Y" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="X" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="Z" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="U" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="V" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="S1" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="S2" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="S3" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="S4" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="S5" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="S6" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="S7" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="S8" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="L1" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="L2" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="L3" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+      <Color CMYK="0 0 0 0.2" ColorType="Normal" HDM:Purpose="Printing"
+        MappingSelection="UseProcessColorValues" Name="L4" NeutralDensity="0.2" UsePDLAlternateCS="false"/>
+    </ColorPool>
+    <ColorSpaceConversionParams Class="Parameter" ColorManagementSystem="HDPP_CMM"
+      HDM:AllowSpectralColormanagement="false" HDM:CMYKAdjustmentFactors="1.0 1.0 1.0 1.0"
+      HDM:DoBasicCMM="false" HDM:DoCMM="true" HDM:IgnoreTransparentColors="false"
+      HDM:PreserveBlackOnBW="false" HDM:ProfileType="MEDIA" HDM:PureBlackType="keepBlack"
+      HDM:RenameSpots="false" HDM:SetDefaultCMYKColorSpace="false" HDM:SpotColorInks="FromJob"
+      HDM:SpotColorMapping="MapAllButJob" HDM:UseCMYKProfile="false"
+      HDM:UseEmbeddedCMYKProfile="false" ICCProfileUsage="UseSupplied"
+      ID="Link_261111_085228570_001426" Locked="true" Status="Available">
+      <FileSpec ResourceUsage="FinalTargetDevice" URL="file://PPMS/PTConfig/SysConfig/Resources/ICC-Profiles/Printer/Digital/Default/isotype2.icc">
+        <pt:BaseLocID Attribute="URL" Name="ICC-Profiles"/>
+      </FileSpec>
+      <ColorSpaceConversionOp HDM:BlackPointCompensation="true" HDM:MapGrayToBlackThreshold="0.0"
+        HDM:PreserveBlackMode="Off" HDM:PreserveCMY="false" HDM:PreserveCMYMode="Coarse"
+        HDM:PreserveCMYSecondaries="false" HDM:PreserveCMYType="Off" HDM:RGBGray2BlackLimit="1.0"
+        HDM:RenderingIntentSource="JDF" HDM:ReplaceSourceColor="0.0 0.0 0.0 1.0"
+        HDM:ReplacementColor="0.0 0.0 0.0 1.0" HDM:SecondStepPreserveBlack="false"
+        HDM:SecondStepPreserveHundredPercentBlackOnly="false" IgnoreEmbeddedICC="false"
+        IncludeProcessSpots="false" Operation="Untag" PreserveBlack="false" RGBGray2Black="false"
+        RGBGray2BlackThreshold="1.0" RenderingIntent="RelativeColorimetric" SourceCS="CMYK" SourceObjects="Text LineArt">
+        <FileSpec ResourceUsage="SourceProfile">
+          <pt:BaseLocID Attribute="URL" Name="ICC-Profiles"/>
+        </FileSpec>
+      </ColorSpaceConversionOp>
+      <ColorSpaceConversionOp HDM:BlackPointCompensation="true" HDM:MapGrayToBlackThreshold="0.0"
+        HDM:PreserveBlackMode="Off" HDM:PreserveCMY="false" HDM:PreserveCMYMode="Coarse"
+        HDM:PreserveCMYSecondaries="false" HDM:PreserveCMYType="Off" HDM:RGBGray2BlackLimit="1.0"
+        HDM:RenderingIntentSource="JDF" HDM:SecondStepPreserveBlack="false"
+        HDM:SecondStepPreserveHundredPercentBlackOnly="false" IgnoreEmbeddedICC="false"
+        IncludeProcessSpots="false" Operation="Untag" PreserveBlack="false" RGBGray2Black="false"
+        RGBGray2BlackThreshold="1.0" RenderingIntent="RelativeColorimetric" SourceCS="CMYK" SourceObjects="ImagePhotographic ImageScreenShot SmoothShades">
+        <FileSpec ResourceUsage="SourceProfile">
+          <pt:BaseLocID Attribute="URL" Name="ICC-Profiles"/>
+        </FileSpec>
+      </ColorSpaceConversionOp>
+      <ColorSpaceConversionOp HDM:BlackPointCompensation="true" HDM:MapGrayToBlackThreshold="0.0"
+        HDM:PreserveBlackMode="Off" HDM:PreserveCMY="false" HDM:PreserveCMYMode="Coarse"
+        HDM:PreserveCMYSecondaries="false" HDM:PreserveCMYType="Off" HDM:RGBGray2BlackLimit="1.0"
+        HDM:RenderingIntentSource="JDF" HDM:ReplaceSourceColor="0.0 0.0 0.0 1.0"
+        HDM:ReplacementColor="0.0 0.0 0.0 1.0" HDM:SecondStepPreserveBlack="false"
+        HDM:SecondStepPreserveHundredPercentBlackOnly="false" IgnoreEmbeddedICC="false"
+        IncludeProcessSpots="false" Operation="Untag" PreserveBlack="false" RGBGray2Black="false"
+        RGBGray2BlackThreshold="1.0" RenderingIntent="RelativeColorimetric" SourceCS="ICCCMYK" SourceObjects="Text LineArt">
+        <FileSpec ResourceUsage="SourceProfile">
+          <pt:BaseLocID Attribute="URL" Name="ICC-Profiles"/>
+        </FileSpec>
+      </ColorSpaceConversionOp>
+      <ColorSpaceConversionOp HDM:BlackPointCompensation="true" HDM:MapGrayToBlackThreshold="0.0"
+        HDM:PreserveBlackMode="Off" HDM:PreserveCMY="false" HDM:PreserveCMYMode="Coarse"
+        HDM:PreserveCMYSecondaries="false" HDM:PreserveCMYType="Off" HDM:RGBGray2BlackLimit="1.0"
+        HDM:RenderingIntentSource="JDF" HDM:SecondStepPreserveBlack="false"
+        HDM:SecondStepPreserveHundredPercentBlackOnly="false" IgnoreEmbeddedICC="false"
+        IncludeProcessSpots="false" Operation="Untag" PreserveBlack="false" RGBGray2Black="false"
+        RGBGray2BlackThreshold="1.0" RenderingIntent="RelativeColorimetric" SourceCS="ICCCMYK" SourceObjects="ImagePhotographic ImageScreenShot SmoothShades">
+        <FileSpec ResourceUsage="SourceProfile">
+          <pt:BaseLocID Attribute="URL" Name="ICC-Profiles"/>
+        </FileSpec>
+      </ColorSpaceConversionOp>
+      <ColorSpaceConversionOp HDM:BlackPointCompensation="false" HDM:MapGrayToBlack="false"
+        HDM:MapGrayToBlackThreshold="0.0" HDM:PreserveBlackMode="Off" HDM:PreserveCMY="false"
+        HDM:PreserveCMYMode="Coarse" HDM:PreserveCMYSecondaries="false" HDM:PreserveCMYType="Off"
+        HDM:RGBGray2BlackLimit="1.0" HDM:RenderingIntentSource="JDF"
+        HDM:ReplaceSourceColor="0.0 0.0 0.0" HDM:ReplacementColor="0.0 0.0 0.0 1.0"
+        HDM:SecondStepPreserveBlack="false" HDM:SecondStepPreserveHundredPercentBlackOnly="false"
+        IgnoreEmbeddedICC="false" IncludeProcessSpots="false" Operation="Convert"
+        PreserveBlack="false" RGBGray2Black="false" RGBGray2BlackThreshold="1.0"
+        RenderingIntent="Perceptual" SourceCS="RGB" SourceObjects="Text LineArt">
+        <FileSpec ResourceUsage="SourceProfile" URL="file://PPMS/PTConfig/SysConfig/Resources/ICC-Profiles/Monitor/HDM sRGB Profile.icm">
+          <pt:BaseLocID Attribute="URL" Name="ICC-Profiles"/>
+        </FileSpec>
+      </ColorSpaceConversionOp>
+      <ColorSpaceConversionOp HDM:BlackPointCompensation="false" HDM:MapGrayToBlackThreshold="0.0"
+        HDM:PreserveBlackMode="Off" HDM:PreserveCMY="false" HDM:PreserveCMYMode="Coarse"
+        HDM:PreserveCMYSecondaries="false" HDM:PreserveCMYType="Off" HDM:RGBGray2BlackLimit="1.0"
+        HDM:RenderingIntentSource="JDF" HDM:SecondStepPreserveBlack="false"
+        HDM:SecondStepPreserveHundredPercentBlackOnly="false" IgnoreEmbeddedICC="false"
+        IncludeProcessSpots="false" Operation="Convert" PreserveBlack="false" RGBGray2Black="false"
+        RGBGray2BlackThreshold="1.0" RenderingIntent="Perceptual" SourceCS="RGB" SourceObjects="ImagePhotographic ImageScreenShot SmoothShades">
+        <FileSpec ResourceUsage="SourceProfile" URL="file://PPMS/PTConfig/SysConfig/Resources/ICC-Profiles/Monitor/HDM sRGB Profile.icm">
+          <pt:BaseLocID Attribute="URL" Name="ICC-Profiles"/>
+        </FileSpec>
+      </ColorSpaceConversionOp>
+      <ColorSpaceConversionOp HDM:BlackPointCompensation="false" HDM:MapGrayToBlack="false"
+        HDM:MapGrayToBlackThreshold="0.0" HDM:PreserveBlackMode="Off" HDM:PreserveCMY="false"
+        HDM:PreserveCMYMode="Coarse" HDM:PreserveCMYSecondaries="false" HDM:PreserveCMYType="Off"
+        HDM:RGBGray2BlackLimit="1.0" HDM:RenderingIntentSource="JDF"
+        HDM:ReplaceSourceColor="0.0 0.0 0.0" HDM:ReplacementColor="0.0 0.0 0.0 1.0"
+        HDM:SecondStepPreserveBlack="false" HDM:SecondStepPreserveHundredPercentBlackOnly="false"
+        IgnoreEmbeddedICC="false" IncludeProcessSpots="false" Operation="Convert"
+        PreserveBlack="false" RGBGray2Black="false" RGBGray2BlackThreshold="1.0"
+        RenderingIntent="Perceptual" SourceCS="ICCRGB" SourceObjects="Text LineArt">
+        <FileSpec ResourceUsage="SourceProfile" URL="file://PPMS/PTConfig/SysConfig/Resources/ICC-Profiles/Monitor/HDM sRGB Profile.icm">
+          <pt:BaseLocID Attribute="URL" Name="ICC-Profiles"/>
+        </FileSpec>
+      </ColorSpaceConversionOp>
+      <ColorSpaceConversionOp HDM:BlackPointCompensation="false" HDM:MapGrayToBlackThreshold="0.0"
+        HDM:PreserveBlackMode="Off" HDM:PreserveCMY="false" HDM:PreserveCMYMode="Coarse"
+        HDM:PreserveCMYSecondaries="false" HDM:PreserveCMYType="Off" HDM:RGBGray2BlackLimit="1.0"
+        HDM:RenderingIntentSource="JDF" HDM:SecondStepPreserveBlack="false"
+        HDM:SecondStepPreserveHundredPercentBlackOnly="false" IgnoreEmbeddedICC="false"
+        IncludeProcessSpots="false" Operation="Convert" PreserveBlack="false" RGBGray2Black="false"
+        RGBGray2BlackThreshold="1.0" RenderingIntent="Perceptual" SourceCS="ICCRGB" SourceObjects="ImagePhotographic ImageScreenShot SmoothShades">
+        <FileSpec ResourceUsage="SourceProfile" URL="file://PPMS/PTConfig/SysConfig/Resources/ICC-Profiles/Monitor/HDM sRGB Profile.icm">
+          <pt:BaseLocID Attribute="URL" Name="ICC-Profiles"/>
+        </FileSpec>
+      </ColorSpaceConversionOp>
+      <ColorSpaceConversionOp HDM:BlackPointCompensation="true" HDM:MapGrayToBlackThreshold="0.0"
+        HDM:PreserveBlackMode="Off" HDM:PreserveCMY="false" HDM:PreserveCMYMode="Coarse"
+        HDM:PreserveCMYSecondaries="false" HDM:PreserveCMYType="Off" HDM:RGBGray2BlackLimit="1.0"
+        HDM:RenderingIntentSource="JDF" HDM:ReplaceSourceColor="0.0"
+        HDM:ReplacementColor="0.0 0.0 0.0 1.0" HDM:SecondStepPreserveBlack="false"
+        HDM:SecondStepPreserveHundredPercentBlackOnly="false" IgnoreEmbeddedICC="false"
+        IncludeProcessSpots="false" Operation="Convert" PreserveBlack="false" RGBGray2Black="false"
+        RGBGray2BlackThreshold="1.0" RenderingIntent="RelativeColorimetric" SourceCS="Gray" SourceObjects="Text LineArt">
+        <FileSpec ResourceUsage="SourceProfile">
+          <pt:BaseLocID Attribute="URL" Name="ICC-Profiles"/>
+        </FileSpec>
+      </ColorSpaceConversionOp>
+      <ColorSpaceConversionOp HDM:BlackPointCompensation="true" HDM:MapGrayToBlackThreshold="0.0"
+        HDM:PreserveBlackMode="Off" HDM:PreserveCMY="false" HDM:PreserveCMYMode="Coarse"
+        HDM:PreserveCMYSecondaries="false" HDM:PreserveCMYType="Off" HDM:RGBGray2BlackLimit="1.0"
+        HDM:RenderingIntentSource="JDF" HDM:SecondStepPreserveBlack="false"
+        HDM:SecondStepPreserveHundredPercentBlackOnly="false" IgnoreEmbeddedICC="false"
+        IncludeProcessSpots="false" Operation="Convert" PreserveBlack="false" RGBGray2Black="false"
+        RGBGray2BlackThreshold="1.0" RenderingIntent="RelativeColorimetric" SourceCS="Gray" SourceObjects="ImagePhotographic ImageScreenShot SmoothShades">
+        <FileSpec ResourceUsage="SourceProfile">
+          <pt:BaseLocID Attribute="URL" Name="ICC-Profiles"/>
+        </FileSpec>
+      </ColorSpaceConversionOp>
+      <ColorSpaceConversionOp HDM:BlackPointCompensation="true" HDM:MapGrayToBlackThreshold="0.0"
+        HDM:PreserveBlackMode="Off" HDM:PreserveCMY="false" HDM:PreserveCMYMode="Coarse"
+        HDM:PreserveCMYSecondaries="false" HDM:PreserveCMYType="Off" HDM:RGBGray2BlackLimit="1.0"
+        HDM:RenderingIntentSource="JDF" HDM:ReplaceSourceColor="0.0"
+        HDM:ReplacementColor="0.0 0.0 0.0 1.0" HDM:SecondStepPreserveBlack="false"
+        HDM:SecondStepPreserveHundredPercentBlackOnly="false" IgnoreEmbeddedICC="false"
+        IncludeProcessSpots="false" Operation="Untag" PreserveBlack="false" RGBGray2Black="false"
+        RGBGray2BlackThreshold="1.0" RenderingIntent="RelativeColorimetric" SourceCS="ICCGray" SourceObjects="Text LineArt">
+        <FileSpec ResourceUsage="SourceProfile">
+          <pt:BaseLocID Attribute="URL" Name="ICC-Profiles"/>
+        </FileSpec>
+      </ColorSpaceConversionOp>
+      <ColorSpaceConversionOp HDM:BlackPointCompensation="true" HDM:MapGrayToBlackThreshold="0.0"
+        HDM:PreserveBlackMode="Off" HDM:PreserveCMY="false" HDM:PreserveCMYMode="Coarse"
+        HDM:PreserveCMYSecondaries="false" HDM:PreserveCMYType="Off" HDM:RGBGray2BlackLimit="1.0"
+        HDM:RenderingIntentSource="JDF" HDM:SecondStepPreserveBlack="false"
+        HDM:SecondStepPreserveHundredPercentBlackOnly="false" IgnoreEmbeddedICC="false"
+        IncludeProcessSpots="false" Operation="Untag" PreserveBlack="false" RGBGray2Black="false"
+        RGBGray2BlackThreshold="1.0" RenderingIntent="RelativeColorimetric" SourceCS="ICCGray" SourceObjects="ImagePhotographic ImageScreenShot SmoothShades">
+        <FileSpec ResourceUsage="SourceProfile">
+          <pt:BaseLocID Attribute="URL" Name="ICC-Profiles"/>
+        </FileSpec>
+      </ColorSpaceConversionOp>
+      <ColorSpaceConversionOp HDM:BlackPointCompensation="false" HDM:MapGrayToBlackThreshold="0.0"
+        HDM:PreserveBlackMode="Off" HDM:PreserveCMY="false" HDM:PreserveCMYMode="Coarse"
+        HDM:PreserveCMYSecondaries="false" HDM:PreserveCMYType="Off" HDM:RGBGray2BlackLimit="1.0"
+        HDM:RenderingIntentSource="JDF" HDM:SecondStepPreserveBlack="false"
+        HDM:SecondStepPreserveHundredPercentBlackOnly="false" IgnoreEmbeddedICC="false"
+        IncludeProcessSpots="false" Operation="Convert" PreserveBlack="false" RGBGray2Black="false"
+        RGBGray2BlackThreshold="1.0" RenderingIntent="AbsoluteColorimetric" SourceCS="ICCLAB" SourceObjects="Text LineArt">
+        <FileSpec ResourceUsage="SourceProfile" URL="file://PPMS/PTConfig/SysConfig/Resources/ICC-Profiles/ColorSpace/lab/CIELabD50.icm">
+          <pt:BaseLocID Attribute="URL" Name="ICC-Profiles"/>
+        </FileSpec>
+      </ColorSpaceConversionOp>
+      <ColorSpaceConversionOp HDM:BlackPointCompensation="false" HDM:MapGrayToBlackThreshold="0.0"
+        HDM:PreserveBlackMode="Off" HDM:PreserveCMY="false" HDM:PreserveCMYMode="Coarse"
+        HDM:PreserveCMYSecondaries="false" HDM:PreserveCMYType="Off" HDM:RGBGray2BlackLimit="1.0"
+        HDM:RenderingIntentSource="JDF" HDM:SecondStepPreserveBlack="false"
+        HDM:SecondStepPreserveHundredPercentBlackOnly="false" IgnoreEmbeddedICC="false"
+        IncludeProcessSpots="false" Operation="Convert" PreserveBlack="false" RGBGray2Black="false"
+        RGBGray2BlackThreshold="1.0" RenderingIntent="Perceptual" SourceCS="ICCLAB" SourceObjects="ImagePhotographic ImageScreenShot SmoothShades">
+        <FileSpec ResourceUsage="SourceProfile" URL="file://PPMS/PTConfig/SysConfig/Resources/ICC-Profiles/ColorSpace/lab/CIELabD50.icm">
+          <pt:BaseLocID Attribute="URL" Name="ICC-Profiles"/>
+        </FileSpec>
+      </ColorSpaceConversionOp>
+    </ColorSpaceConversionParams>
+    <Device Class="Implementation" DeviceID="D7" FriendlyName="HP Indigo 7900"
+      ID="Link_261111_085228572_001436" Locked="true" Status="Available"/>
+    <DigitalPrintingParams BannerMode="Off" Class="Parameter" Collate="SheetSetAndJob"
+      ConvertPDFVT2PPMLZip="false" CopySeparatorSheetAmount="1" CopySeparatorSheetTray="None"
+      Crease="None" CreaseTrimEnable="Off" CreaseTrimHead="5.0" CreaseTrimTail="5.0"
+      CreateEmptySurfacesInLayoutForEFI="false" DeviceType="BasicHp7000" FoldCatalog="None"
+      FoldOrder="Inside" HDM:BFU="Auto" HDM:BackTargetProfileType="" HDM:BackTargetProfileURL=""
+      HDM:CenterOffset="0.0" HDM:ColorPresetName="" HDM:CompucutCustomName="" HDM:CompucutFile=""
+      HDM:CompucutIncludePDF="false" HDM:CompucutLimitChars="false" HDM:CompucutUniqueName="false"
+      HDM:Cover="Off" HDM:CoverTray="None" HDM:CreatePQCBar="false" HDM:CreationVersion="21.1"
+      HDM:DeactivatePrismaCMM="false" HDM:DisplayName="FSWDS"
+      HDM:DoInRIPColorSpaceConversion="false" HDM:DoInRIPImposition="false"
+      HDM:DoInRIPLayoutPreparation="false" HDM:DoMediaMatchingInAutoLayout="false"
+      HDM:DuplexMediaTurnOverIntent="Turn" HDM:EmbedTargetProfileAsOutputIntent="false"
+      HDM:ExternColorsDir="" HDM:FinishedFront="210.0" HDM:FinishedSide="297.0" HDM:Finisher=""
+      HDM:FinisherUnit="mm" HDM:FrontTargetProfileType="" HDM:FrontTargetProfileURL=""
+      HDM:GrayOutputProfileUrl="" HDM:IsPrepared="false" HDM:OutputCondition=""
+      HDM:OutputMode="Normal" HDM:PDFProofDestination="" HDM:PQCBarHeight="0.0"
+      HDM:PQCBarPosition="0.0" HDM:PaperLength="297.0" HDM:PaperWidth="210.0" HDM:Staple="Off"
+      HDM:TrimFront="4.5" HDM:TrimFrontEnable="On" HDM:TrimHead="6.0" HDM:TrimSideEnable="On"
+      HDM:TrimTail="6.0" HDM:TrimType="Off" HDM:UseFinisher="false" HDM:UsePrismaInripCMM="false"
+      HDM:UseUserPQCBarPosition="false" HDM:UserPQCBarPosition="0.0" HoleMaking="None"
+      Hotfolder="D7-FS" ID="Link_261111_085228571_001431" InputTray="AutoSelect" InsertMode="Header"
+      InsertTray="None" InterfaceBoxFunction="None" JetfireInterfaceBoxFunction="1"
+      JobSeparatorSheetTray="None" MediaDimension="1275.5907 907.08672" MediaId="110404357"
+      MediaName="100 Offset" MediaPrintMode="" MediaPrintModeConvToGray="false"
+      MediaSpotColorInfo="" OutputTray="AutoSelect" PageDelivery="SameOrderFaceDown"
+      PartIDKeys="Run" PartUsage="Implicit" Perforate="None" ProcessColorModel="DeviceCMYK"
+      RecordSeparatorSheetAmount="1" RecordSeparatorSheetTray="None" Screening="200P"
+      ShiftIntervall="1" ShiftMode="Off" SquareFold="Off" StackEject="Off" Status="Available"
+      Stitching="None" TonerPrintMode="Productivity" TonerPrintModeWhite="Productivity"
+      TonerReduktion="false" TrimEnable="Off" TrimWidth="4.0" VirtualPrinter="D7-FS">
+      <HDM:PalletSheet AdjustPositionForEFI="false" AlternateOutputTray="" Position="before"
+        Selected="false" TemplateUrl="" UseBodyMedia="true">
+        <Media Dimension="0.0 0.0" Id="" Name=""/>
+      </HDM:PalletSheet>
+      <HDM:TrayAllocation/>
+      <HDM:DigitalThumbnail HDM:ThumbnailSize="600 600"/>
+      <HDM:AutoColorDiagnosisParameter AddColorBar="false" AddInspectionPattern="false"
+        AddPrintResultId="false" DetectColorFluctuation="false" DetectSpotsAndStreaks="false"
+        DetectionLevel="PaperSetting" EnableAutoColorDiagnosis="false"
+        EnableImageQualityMonitor="false" Position="LeadingTrailing"/>
+      <DigitalPrintingParams HDM:AmountPerCopy="2"
+        HDM:MaximumContentsBoundingBox="0 0 1260.15805384 894.48838115"
+        HDM:SegmentLength="907.08672"
+        HDM:SubmittedElements="PL_W2PLayout : CCSA Xmas Wave 1 - Lift 1 6pp DL Rat_pdf.pdf"
+        Locked="true" NumSheets="1" NumSurfaces="2" Run="Run_261111_085342756_001581">
+        <HDM:UsedColors>
+          <Color Name="Black" Type="Unknown"/>
+          <Color Name="Cyan" Type="Unknown"/>
+          <Color Name="Magenta" Type="Unknown"/>
+          <Color Name="Yellow" Type="Unknown"/>
+        </HDM:UsedColors>
+        <HDM:SubmittedSpotColors/>
+        <HDM:UsedMedia>
+          <Media Id="110404357" Name="100 Offset"/>
+        </HDM:UsedMedia>
+        <HDM:PrintRange Mode="PRM_pr" Range=""/>
+        <HDM:DigitalThumbnail>
+          <FileSpec URL="file://PPMS/PTJobs/Jobs/2026-11-11/064238/System/Thumbnails/Digital/Run_261111_085342756_001581.png"/>
+        </HDM:DigitalThumbnail>
+      </DigitalPrintingParams>
+    </DigitalPrintingParams>
+    <HDM:DeviceColorControl Class="Parameter" HDM:ColorSpaceAllToCMYK="0 0 0 1.0"
+      HDM:IgnoreDieLineColors="true" HDM:IgnoreDieLineColorsExceptLeadInSheets="true"
+      HDM:IgnoreOpaqueColors="true" HDM:IgnoreSpecialColors="true"
+      HDM:IgnoreTransparentColors="false" HDM:MapOpaqueColorsToOpaqueDeviceColor="true"
+      HDM:MapSpecialColorsToSpecialDeviceColor="true"
+      HDM:MapTransparentColorsToTransparentDeviceColor="true" HDM:ProofColorToCMYK=""
+      HDM:ProofColorToK="false" HDM:SetAllColorsExtern="false" ID="Link_261111_085228572_001433"
+      Locked="true" Status="Available">
+      <ColorPool/>
+      <DeviceColorantOrder/>
+    </HDM:DeviceColorControl>
+    <InterpretingParams Center="false" Class="Parameter" HDM:OverPrintEmulation="false"
+      ID="Link_261111_085228571_001428" Locked="true" MirrorAround="None" Scaling="1.0 1.0" Status="Available">
+      <FitPolicy HDM:ClipOffsetSelection="Center" RotatePolicy="NoRotate" SizePolicy="Abort"/>
+      <ObjectResolution Resolution="1200 1200" SourceObjects="All"/>
+    </InterpretingParams>
+    <LayoutPreparationParams Class="Parameter" FrontMarkList=""
+      HDM:DynamicMarksLocation="file://PPMS/PTConfig/SysConfig/Resources/Marks"
+      ID="Link_261111_085228562_001425" PartIDKeys="Run" PartUsage="Implicit" Sides="TwoSidedFlipY" Status="Available">
+      <pt:BaseLocID Attribute="HDM:DynamicMarksLocation" Name="Marks"/>
+      <HDM:ExternalImpositionTemplate>
+        <FileSpec DescriptiveName="" ResourceUsage="AutoLayout" URL=""/>
+      </HDM:ExternalImpositionTemplate>
+      <HDM:PIETemplate Content="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; standalone=&quot;no&quot; ?>&#xa;&lt;JDF xmlns=&quot;http://www.CIP4.org/JDFSchema_1_1&quot; DescriptiveName=&quot;layout group&quot; ID=&quot;n261111085328.385_000026&quot; JobPartID=&quot;n261111085328.385_000026&quot; Status=&quot;Ready&quot; Type=&quot;Combined&quot; Types=&quot;LayoutPreparation Imposition ColorSpaceConversion Trapping&quot; Version=&quot;1.3&quot; xmlns:HDM=&quot;www.heidelberg.com/schema/HDM&quot; xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot; xsi:type=&quot;Combined&quot;>&#xa;  &#xa;&lt;!--Generated by the CIP4 C++ open source JDF Library version CIP4 JDF Writer C++ 2.1.5BLD129-->&#xa;  &lt;AuditPool>&#xa;    &lt;Created AgentName=&quot;CIP4 JDF Writer C++&quot; AgentVersion=&quot;2.1.5BLD129&quot; ID=&quot;a261111085328.385_000025&quot; TimeStamp=&quot;2026-11-11T08:53:28+11:00&quot;/>&#xa;    &lt;Modified AgentName=&quot;Imposition Engine JDF Writer&quot; AgentVersion=&quot;IMPOENGINE_17.0BLD108&quot; Author=&quot;Prinect Imposition Editor&quot; ID=&quot;a261111085328.394_000034&quot; TimeStamp=&quot;2026-11-11T08:53:28+11:00&quot;>&#xa;      &lt;Comment HDM:FileFormatVersion=&quot;1.1&quot; ID=&quot;c261111085328.395_000035&quot;>LayoutPreparationParams&lt;/Comment>&#xa;    &lt;/Modified>&#xa;  &lt;/AuditPool>&#xa;  &lt;ResourcePool>&#xa;    &lt;LayoutPreparationParams AgentName=&quot;CIP4 JDF Writer C++&quot; AgentVersion=&quot;2.1.5BLD129&quot; Class=&quot;Parameter&quot; CreepValue=&quot;0 0&quot; FrontMarkList=&quot;CutMark&quot; Gutter=&quot;0 0&quot; HDM:ApplyCFF2=&quot;false&quot; HDM:BackOnFront=&quot;false&quot; HDM:CFF2FilePath=&quot;&quot; HDM:CollatingMarkMode=&quot;0&quot; HDM:CollatingMarkOWL=&quot;1 30 5&quot; HDM:CoverApplication=&quot;false&quot; HDM:CreateLeadIn=&quot;false&quot; HDM:CreateLeadOut=&quot;false&quot; HDM:CreepCompensationMode=&quot;CompensateByShifting&quot; HDM:CreepValueAdjustmentFactor=&quot;1&quot; HDM:CreepValueFromPaper=&quot;0&quot; HDM:CreepValueSource=&quot;FromUser&quot; HDM:CustomColumnGutter=&quot;&quot; HDM:CustomRotation=&quot;&quot; HDM:CustomRowGutter=&quot;&quot; HDM:CutAndStackStripes=&quot;false&quot; HDM:CutMarkOWL=&quot;8 12 0.3&quot; HDM:CutblockCutMarkOWL=&quot;8 12 0.3&quot; HDM:ExtendedCoverMode=&quot;NotKnown&quot; HDM:FirstCoverMediaIndex=&quot;0&quot; HDM:FixCutMarks=&quot;false&quot; HDM:FoldMarkOWL=&quot;8 12 0.3&quot; HDM:Insert1MediaIndex=&quot;0&quot; HDM:InsertMediaIndex=&quot;0&quot; HDM:InsideBackCoverEmpty=&quot;false&quot; HDM:InsideFrontCoverEmpty=&quot;false&quot; HDM:LastCoverMediaIndex=&quot;0&quot; HDM:LeadInAmount=&quot;1&quot; HDM:LeadOutAmount=&quot;1&quot; HDM:MaxStepDocs=&quot;true&quot; HDM:MirrorContent=&quot;false&quot; HDM:OutsideBackCoverEmpty=&quot;false&quot; HDM:OutsideFrontCoverEmpty=&quot;false&quot; HDM:ParamImpositionMethod=&quot;PressSheetLayout_V2&quot; HDM:PrinterMargin=&quot;9 15 9 15&quot; HDM:SequencialStepRepeat=&quot;false&quot; HDM:SheetLayOWL=&quot;8 12 0.3&quot; HDM:StepDocsGutter=&quot;14.17322835 0&quot; HDM:TemplateCreationMode=&quot;false&quot; HDM:TemplateCreationPages=&quot;0&quot; HorizontalCreep=&quot;0&quot; ID=&quot;r261111085328.392_000030&quot; NumberUp=&quot;1 1&quot; PageDistributionScheme=&quot;Perfect&quot; PresentationDirection=&quot;Xyz&quot; Sides=&quot;TwoSidedFlipY&quot; StackDepth=&quot;1&quot; Status=&quot;Available&quot; StepRepeat=&quot;2 2 1&quot;>&#xa;      &lt;ImageShift HDM:OffsetMode=&quot;Sujetposition&quot; PositionX=&quot;Center&quot; PositionY=&quot;Center&quot; ShiftFront=&quot;0 0&quot;/>&#xa;      &lt;HDM:FoldingSheetDistributionScheme HDM:Direction=&quot;horizontal&quot; HDM:Pattern=&quot;straight&quot; HDM:StartPoint=&quot;upper left&quot;/>&#xa;      &lt;HDM:TabPageParams FromPDF=&quot;false&quot; MediaId=&quot;&quot; MediaName=&quot;&quot; Selected=&quot;false&quot;/>&#xa;      &lt;PageCell DescriptiveName=&quot;FromPDF&quot; HDM:Bleed=&quot;0&quot; TrimSize=&quot;595.27559055 841.88976378&quot;>&#xa;        &lt;FitPolicy SizePolicy=&quot;ReduceToFit&quot;/>&#xa;      &lt;/PageCell>&#xa;      &lt;HDM:MarkParams HDM:CMMInfo=&quot;false&quot; HDM:ExtendedJobInformation=&quot;false&quot; HDM:Mode=&quot;&quot; HDM:PositionBack=&quot;14.17330000 14.17330000&quot; HDM:PositionFront=&quot;14.17330000 14.17330000&quot; HDM:Rotate=&quot;Rotate0&quot; HDM:ShortestInfoText=&quot;false&quot; HDM:ShowJobID=&quot;true&quot; HDM:ShowJobName=&quot;false&quot; HDM:SideBySide=&quot;true&quot; HDM:Type=&quot;JobField&quot; HDM:UserText=&quot;&quot;/>&#xa;      &lt;HDM:MarkParams HDM:DescriptiveName=&quot;&quot; HDM:FixColorPatchPosition=&quot;false&quot; HDM:Mode=&quot;&quot; HDM:Position=&quot;0 0&quot; HDM:Repeat=&quot;false&quot; HDM:Rotate=&quot;Rotate0&quot; HDM:Scale=&quot;1&quot; HDM:Type=&quot;ColorControlStrip&quot;/>&#xa;      &lt;HDM:MarkParams HDM:DescriptiveName=&quot;- - - -&quot; HDM:Position=&quot;0 0&quot; HDM:Type=&quot;ColorPickerStrip&quot;/>&#xa;      &lt;HDM:MarkParams HDM:DigitalPrintUnitOption=&quot;SlavePU2&quot; HDM:MarkPositions=&quot;Left&quot; HDM:Mode=&quot;&quot; HDM:Position=&quot;0 0&quot; HDM:ReferenceMarksNegativeKnockout=&quot;false&quot; HDM:Type=&quot;SensotecMark&quot; HDM:WhiteBackground=&quot;false&quot;/>&#xa;      &lt;HDM:MarkParams HDM:Density=&quot;0.4&quot; HDM:Mode=&quot;&quot; HDM:Position=&quot;8.50400000 0&quot; HDM:Type=&quot;SupportBar&quot; HDM:Width=&quot;17&quot;/>&#xa;      &lt;HDM:MarkParams HDM:LineWidth=&quot;0.3&quot; HDM:MarkPositions=&quot;Right&quot; HDM:MediaBox=&quot;0 0 -1 -1&quot; HDM:Mode=&quot;&quot; HDM:NumMarksPerSide=&quot;2&quot; HDM:Offset=&quot;2.83&quot; HDM:Position=&quot;0 0&quot; HDM:Scale=&quot;0.5&quot; HDM:TrimBox=&quot;0 0 -1 -1&quot; HDM:Type=&quot;RegisterMark&quot;/>&#xa;      &lt;HDM:MarkParams HDM:LineWidth=&quot;-1&quot; HDM:MediaBox=&quot;0 0 -1 -1&quot; HDM:Mode=&quot;&quot; HDM:PositionFront=&quot;1 14.17330000&quot; HDM:Scale=&quot;1&quot; HDM:Type=&quot;PullLay&quot;/>&#xa;      &lt;HDM:MarkParams HDM:Density=&quot;1&quot; HDM:Height=&quot;10&quot; HDM:Mode=&quot;&quot; HDM:PositionFront=&quot;9 0&quot; HDM:RowRepeat=&quot;-1&quot; HDM:Type=&quot;PunchMark&quot; HDM:Width=&quot;10&quot;/>&#xa;    &lt;/LayoutPreparationParams>&#xa;    &lt;Media AgentName=&quot;CIP4 JDF Writer C++&quot; AgentVersion=&quot;2.1.5BLD129&quot; Brand=&quot;100 Offset&quot; Class=&quot;Parameter&quot; Dimension=&quot;1275.59070000 907.08672&quot; Grade=&quot;2&quot; HDM:BackTargetProfileType=&quot;PT_MEDIA&quot; HDM:BackTargetProfileURL=&quot;file://PPMS/PTConfig/SysConfig/Resources/ICC-Profiles/Printer/Digital/Default/isotype2.icc&quot; HDM:CenterMediaInExposingWindow=&quot;true&quot; HDM:ExpWinDescriptiveName=&quot;&quot; HDM:ExpWinOffset=&quot;0 0&quot; HDM:ExpWinSize=&quot;1275.59070000 907.08672&quot; HDM:ExpWinSizeName=&quot;&quot; HDM:FrontTargetProfileType=&quot;PT_MEDIA&quot; HDM:FrontTargetProfileURL=&quot;file://PPMS/PTConfig/SysConfig/Resources/ICC-Profiles/Printer/Digital/Default/isotype2.icc&quot; HDM:FullSurfaceSpecialInkMode=&quot;Off&quot; HDM:FullSurfaceVarnishMode=&quot;Off&quot; HDM:FullSurfaceWhiteMode=&quot;Off&quot; HDM:MediaID=&quot;110404357&quot; HDM:MediaPrintMode=&quot;&quot; HDM:MediaPrintModeConvToGray=&quot;false&quot; HDM:MediaSpotColorInfoURL=&quot;&quot; ID=&quot;r261111085328.393_000031&quot; Status=&quot;Available&quot; Thickness=&quot;100&quot; Weight=&quot;100&quot;>&#xa;      &lt;Location LocationName=&quot;&quot;/>&#xa;    &lt;/Media>&#xa;    &lt;HDM:FoldingSchema AgentName=&quot;CIP4 JDF Writer C++&quot; AgentVersion=&quot;2.1.5BLD129&quot; Class=&quot;Parameter&quot; DescriptiveName=&quot;F2-1 1x1&quot; HDM:AlternateRotation=&quot;false&quot; HDM:AutoGaps=&quot;false&quot; HDM:Gripper=&quot;0&quot; HDM:GripperMargin=&quot;0&quot; HDM:Gutter=&quot;0 0&quot; HDM:NumberUp=&quot;1 1&quot; HDM:Rotate=&quot;0&quot; ID=&quot;r261111085328.394_000032&quot; PartIDKeys=&quot;PageNumber&quot; PartUsage=&quot;Implicit&quot; Status=&quot;Available&quot;>&#xa;      &lt;HDM:FoldingSchema CTM=&quot;1 0 0 1 0 0&quot; HDM:MasterPageIndex=&quot;0&quot; Ord=&quot;0&quot; PageNumber=&quot;1&quot;/>&#xa;      &lt;HDM:FoldingSchema CTM=&quot;1 0 0 1 0 0&quot; HDM:MasterPageIndex=&quot;0&quot; Ord=&quot;1&quot; PageNumber=&quot;2&quot;/>&#xa;    &lt;/HDM:FoldingSchema>&#xa;    &lt;HDM:MasterPage AgentName=&quot;CIP4 JDF Writer C++&quot; AgentVersion=&quot;2.1.5BLD129&quot; Class=&quot;Parameter&quot; ID=&quot;r261111085328.394_000033&quot; PartIDKeys=&quot;PageNumber&quot; PartUsage=&quot;Implicit&quot; Status=&quot;Available&quot;>&#xa;      &lt;HDM:MasterPage DescriptiveName=&quot;Default&quot; HDM:AutoAdjustOrientation=&quot;true&quot; HDM:Bleed=&quot;8.50400000&quot; HDM:ExtraSpace=&quot;0 0 0 0&quot; HDM:PDFTrimSizeMode=&quot;Largest&quot; HDM:ScaleXY=&quot;1 1&quot; HDM:ShiftXY=&quot;0 0&quot; HDM:Size=&quot;595.27559055 841.88976378&quot; HDM:SizeName=&quot;FromPDF&quot; HDM:SizePolicy=&quot;Fit&quot; HDM:SwapLeftRightForEvenPages=&quot;false&quot; HDM:SwapTopBottomForEvenPages=&quot;false&quot; PageNumber=&quot;1&quot;/>&#xa;    &lt;/HDM:MasterPage>&#xa;  &lt;/ResourcePool>&#xa;  &lt;ResourceLinkPool>&#xa;    &lt;LayoutPreparationParamsLink CombinedProcessIndex=&quot;0&quot; Usage=&quot;Input&quot; rRef=&quot;r261111085328.392_000030&quot;/>&#xa;    &lt;MediaLink CombinedProcessIndex=&quot;0&quot; ProcessUsage=&quot;Paper&quot; Usage=&quot;Input&quot; rRef=&quot;r261111085328.393_000031&quot;/>&#xa;    &lt;HDM:FoldingSchemaLink CombinedProcessIndex=&quot;0&quot; Usage=&quot;Input&quot; rRef=&quot;r261111085328.394_000032&quot;/>&#xa;    &lt;HDM:MasterPageLink CombinedProcessIndex=&quot;0&quot; Usage=&quot;Input&quot; rRef=&quot;r261111085328.394_000033&quot;/>&#xa;  &lt;/ResourceLinkPool>&#xa;&lt;/JDF>&#xa;"/>
+      <ImageShift PositionX="Center" PositionY="Center" ShiftBack="0.0 0.0" ShiftFront="0.0 0.0"/>
+      <HDM:FormatAdjustment/>
+      <HDM:MarkParams HDM:Density="0.4" HDM:DigitalPrintUnitOption="SLAVE" HDM:LineWidth="0.3"
+        HDM:MarkPositions="Right" HDM:Mode="LR" HDM:NumMarksPerSide="2" HDM:Offset="2.83"
+        HDM:Position="0.0 0.0" HDM:ReferenceMarksNegativeKnockout="false" HDM:Scale="0.5"
+        HDM:Type="RegisterMark" HDM:WhiteBackground="false" HDM:Width="17.0"/>
+      <HDM:MarkParams HDM:Density="0.4" HDM:DigitalPrintUnitOption="SLAVE" HDM:LineWidth="0.3"
+        HDM:MarkPositions="Right" HDM:Mode="" HDM:NumMarksPerSide="2" HDM:Offset="2.83"
+        HDM:Position="0.0 0.0" HDM:ReferenceMarksNegativeKnockout="false" HDM:Scale="0.5"
+        HDM:Type="ColorControlStripDStrip" HDM:WhiteBackground="false" HDM:Width="17.0"/>
+      <HDM:MarkParams HDM:Density="0.4" HDM:DigitalPrintUnitOption="Slave" HDM:LineWidth="0.3"
+        HDM:MarkPositions="Left" HDM:Mode="LABEL" HDM:NumMarksPerSide="2" HDM:Offset="2.83"
+        HDM:Position="0.0 0.0" HDM:ReferenceMarksNegativeKnockout="false" HDM:Scale="0.5"
+        HDM:Type="SensotecMark" HDM:WhiteBackground="false" HDM:Width="17.0"/>
+      <HDM:MarkParams HDM:Density="0.4" HDM:DigitalPrintUnitOption="SLAVE" HDM:LineWidth="0.3"
+        HDM:MarkPositions="Right" HDM:Mode="" HDM:NumMarksPerSide="2" HDM:Offset="2.83"
+        HDM:Position="8.504 0.0" HDM:ReferenceMarksNegativeKnockout="false" HDM:Scale="0.5"
+        HDM:Type="SupportBar" HDM:WhiteBackground="false" HDM:Width="17.0"/>
+      <LayoutPreparationParams HDM:DeliveryAmount="1" HDM:PrintAmount="1" HDM:QuantityPerPage="2"
+        Locked="true" Run="Run_261111_085342756_001581" Sides="TwoSidedFlipY">
+        <HDM:PIETemplate Content="&#xa;&lt;JDF xmlns=&quot;http://www.CIP4.org/JDFSchema_1_1&quot; DescriptiveName=&quot;layout group&quot; ID=&quot;n261111085328.385_000026&quot; JobPartID=&quot;n261111085328.385_000026&quot; Status=&quot;Ready&quot; Type=&quot;Combined&quot; Types=&quot;LayoutPreparation Imposition ColorSpaceConversion Trapping&quot; Version=&quot;1.3&quot; xmlns:HDM=&quot;www.heidelberg.com/schema/HDM&quot; xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot; xsi:type=&quot;Combined&quot;>&#xa;  &#xa;&#xa;  &lt;!--Generated by the CIP4 C++ open source JDF Library version CIP4 JDF Writer C++ 2.1.5BLD129-->&#xa;  &lt;AuditPool>&#xa;    &lt;Created AgentName=&quot;CIP4 JDF Writer C++&quot; AgentVersion=&quot;2.1.5BLD129&quot; ID=&quot;a261111085328.385_000025&quot; TimeStamp=&quot;2026-11-11T08:53:28+11:00&quot;/>&#xa;    &lt;Modified AgentName=&quot;Imposition Engine JDF Writer&quot; AgentVersion=&quot;IMPOENGINE_17.0BLD108&quot; Author=&quot;Prinect Imposition Editor&quot; ID=&quot;a261111085328.394_000034&quot; TimeStamp=&quot;2026-11-11T08:53:28+11:00&quot;>&#xa;      &lt;Comment HDM:FileFormatVersion=&quot;1.1&quot; ID=&quot;c261111085328.395_000035&quot;>LayoutPreparationParams&lt;/Comment>&#xa;    &lt;/Modified>&#xa;  &lt;/AuditPool>&#xa;  &lt;ResourcePool>&#xa;    &lt;LayoutPreparationParams AgentName=&quot;CIP4 JDF Writer C++&quot; AgentVersion=&quot;2.1.5BLD129&quot; Class=&quot;Parameter&quot; CreepValue=&quot;0 0&quot; FrontMarkList=&quot;CutMark&quot; Gutter=&quot;0 0&quot; HDM:ApplyCFF2=&quot;false&quot; HDM:BackOnFront=&quot;false&quot; HDM:CFF2FilePath=&quot;&quot; HDM:CollatingMarkMode=&quot;0&quot; HDM:CollatingMarkOWL=&quot;1 30 5&quot; HDM:CoverApplication=&quot;false&quot; HDM:CreateLeadIn=&quot;false&quot; HDM:CreateLeadOut=&quot;false&quot; HDM:CreepCompensationMode=&quot;CompensateByShifting&quot; HDM:CreepValueAdjustmentFactor=&quot;1&quot; HDM:CreepValueFromPaper=&quot;0&quot; HDM:CreepValueSource=&quot;FromUser&quot; HDM:CustomColumnGutter=&quot;&quot; HDM:CustomRotation=&quot;&quot; HDM:CustomRowGutter=&quot;&quot; HDM:CutAndStackStripes=&quot;false&quot; HDM:CutMarkOWL=&quot;8 12 0.3&quot; HDM:CutblockCutMarkOWL=&quot;8 12 0.3&quot; HDM:ExtendedCoverMode=&quot;NotKnown&quot; HDM:FirstCoverMediaIndex=&quot;0&quot; HDM:FixCutMarks=&quot;false&quot; HDM:FoldMarkOWL=&quot;8 12 0.3&quot; HDM:Insert1MediaIndex=&quot;0&quot; HDM:InsertMediaIndex=&quot;0&quot; HDM:InsideBackCoverEmpty=&quot;false&quot; HDM:InsideFrontCoverEmpty=&quot;false&quot; HDM:LastCoverMediaIndex=&quot;0&quot; HDM:LeadInAmount=&quot;1&quot; HDM:LeadOutAmount=&quot;1&quot; HDM:MaxStepDocs=&quot;true&quot; HDM:MirrorContent=&quot;false&quot; HDM:OutsideBackCoverEmpty=&quot;false&quot; HDM:OutsideFrontCoverEmpty=&quot;false&quot; HDM:ParamImpositionMethod=&quot;PressSheetLayout_V2&quot; HDM:PrinterMargin=&quot;9 15 9 15&quot; HDM:SequencialStepRepeat=&quot;false&quot; HDM:SheetLayOWL=&quot;8 12 0.3&quot; HDM:StepDocsGutter=&quot;14.17322835 0&quot; HDM:TemplateCreationMode=&quot;false&quot; HDM:TemplateCreationPages=&quot;0&quot; HorizontalCreep=&quot;0&quot; ID=&quot;r261111085328.392_000030&quot; NumberUp=&quot;1 1&quot; PageDistributionScheme=&quot;Perfect&quot; PresentationDirection=&quot;Xyz&quot; Sides=&quot;TwoSidedFlipY&quot; StackDepth=&quot;1&quot; Status=&quot;Available&quot; StepRepeat=&quot;2 2 1&quot;>&#xa;      &lt;ImageShift HDM:OffsetMode=&quot;Sujetposition&quot; PositionX=&quot;Center&quot; PositionY=&quot;Center&quot; ShiftFront=&quot;0 0&quot;/>&#xa;      &lt;HDM:FoldingSheetDistributionScheme HDM:Direction=&quot;horizontal&quot; HDM:Pattern=&quot;straight&quot; HDM:StartPoint=&quot;upper left&quot;/>&#xa;      &lt;HDM:TabPageParams FromPDF=&quot;false&quot; MediaId=&quot;&quot; MediaName=&quot;&quot; Selected=&quot;false&quot;/>&#xa;      &lt;PageCell DescriptiveName=&quot;FromPDF&quot; HDM:Bleed=&quot;0&quot; TrimSize=&quot;595.27559055 841.88976378&quot;>&#xa;        &lt;FitPolicy SizePolicy=&quot;ReduceToFit&quot;/>&#xa;      &lt;/PageCell>&#xa;      &lt;HDM:MarkParams HDM:CMMInfo=&quot;false&quot; HDM:ExtendedJobInformation=&quot;false&quot; HDM:Mode=&quot;&quot; HDM:PositionBack=&quot;14.17330000 14.17330000&quot; HDM:PositionFront=&quot;14.17330000 14.17330000&quot; HDM:Rotate=&quot;Rotate0&quot; HDM:ShortestInfoText=&quot;false&quot; HDM:ShowJobID=&quot;true&quot; HDM:ShowJobName=&quot;false&quot; HDM:SideBySide=&quot;true&quot; HDM:Type=&quot;JobField&quot; HDM:UserText=&quot;&quot;/>&#xa;      &lt;HDM:MarkParams HDM:DescriptiveName=&quot;&quot; HDM:FixColorPatchPosition=&quot;false&quot; HDM:Mode=&quot;&quot; HDM:Position=&quot;0 0&quot; HDM:Repeat=&quot;false&quot; HDM:Rotate=&quot;Rotate0&quot; HDM:Scale=&quot;1&quot; HDM:Type=&quot;ColorControlStrip&quot;/>&#xa;      &lt;HDM:MarkParams HDM:DescriptiveName=&quot;- - - -&quot; HDM:Position=&quot;0 0&quot; HDM:Type=&quot;ColorPickerStrip&quot;/>&#xa;      &lt;HDM:MarkParams HDM:DigitalPrintUnitOption=&quot;SlavePU2&quot; HDM:MarkPositions=&quot;Left&quot; HDM:Mode=&quot;&quot; HDM:Position=&quot;0 0&quot; HDM:ReferenceMarksNegativeKnockout=&quot;false&quot; HDM:Type=&quot;SensotecMark&quot; HDM:WhiteBackground=&quot;false&quot;/>&#xa;      &lt;HDM:MarkParams HDM:Density=&quot;0.4&quot; HDM:Mode=&quot;&quot; HDM:Position=&quot;8.50400000 0&quot; HDM:Type=&quot;SupportBar&quot; HDM:Width=&quot;17&quot;/>&#xa;      &lt;HDM:MarkParams HDM:LineWidth=&quot;0.3&quot; HDM:MarkPositions=&quot;Right&quot; HDM:MediaBox=&quot;0 0 -1 -1&quot; HDM:Mode=&quot;&quot; HDM:NumMarksPerSide=&quot;2&quot; HDM:Offset=&quot;2.83&quot; HDM:Position=&quot;0 0&quot; HDM:Scale=&quot;0.5&quot; HDM:TrimBox=&quot;0 0 -1 -1&quot; HDM:Type=&quot;RegisterMark&quot;/>&#xa;      &lt;HDM:MarkParams HDM:LineWidth=&quot;-1&quot; HDM:MediaBox=&quot;0 0 -1 -1&quot; HDM:Mode=&quot;&quot; HDM:PositionFront=&quot;1 14.17330000&quot; HDM:Scale=&quot;1&quot; HDM:Type=&quot;PullLay&quot;/>&#xa;      &lt;HDM:MarkParams HDM:Density=&quot;1&quot; HDM:Height=&quot;10&quot; HDM:Mode=&quot;&quot; HDM:PositionFront=&quot;9 0&quot; HDM:RowRepeat=&quot;-1&quot; HDM:Type=&quot;PunchMark&quot; HDM:Width=&quot;10&quot;/>&#xa;    &lt;/LayoutPreparationParams>&#xa;    &lt;Media AgentName=&quot;CIP4 JDF Writer C++&quot; AgentVersion=&quot;2.1.5BLD129&quot; Brand=&quot;100 Offset&quot; Class=&quot;Parameter&quot; Dimension=&quot;1275.59070000 907.08672&quot; Grade=&quot;2&quot; HDM:BackTargetProfileType=&quot;PT_MEDIA&quot; HDM:BackTargetProfileURL=&quot;file://PPMS/PTConfig/SysConfig/Resources/ICC-Profiles/Printer/Digital/Default/isotype2.icc&quot; HDM:CenterMediaInExposingWindow=&quot;true&quot; HDM:ExpWinDescriptiveName=&quot;&quot; HDM:ExpWinOffset=&quot;0 0&quot; HDM:ExpWinSize=&quot;1275.59070000 907.08672&quot; HDM:ExpWinSizeName=&quot;&quot; HDM:FrontTargetProfileType=&quot;PT_MEDIA&quot; HDM:FrontTargetProfileURL=&quot;file://PPMS/PTConfig/SysConfig/Resources/ICC-Profiles/Printer/Digital/Default/isotype2.icc&quot; HDM:FullSurfaceSpecialInkMode=&quot;Off&quot; HDM:FullSurfaceVarnishMode=&quot;Off&quot; HDM:FullSurfaceWhiteMode=&quot;Off&quot; HDM:MediaID=&quot;110404357&quot; HDM:MediaPrintMode=&quot;&quot; HDM:MediaPrintModeConvToGray=&quot;false&quot; HDM:MediaSpotColorInfoURL=&quot;&quot; ID=&quot;r261111085328.393_000031&quot; Status=&quot;Available&quot; Thickness=&quot;100&quot; Weight=&quot;100&quot;>&#xa;      &lt;Location LocationName=&quot;&quot;/>&#xa;    &lt;/Media>&#xa;    &lt;HDM:FoldingSchema AgentName=&quot;CIP4 JDF Writer C++&quot; AgentVersion=&quot;2.1.5BLD129&quot; Class=&quot;Parameter&quot; DescriptiveName=&quot;F2-1 1x1&quot; HDM:AlternateRotation=&quot;false&quot; HDM:AutoGaps=&quot;false&quot; HDM:Gripper=&quot;0&quot; HDM:GripperMargin=&quot;0&quot; HDM:Gutter=&quot;0 0&quot; HDM:NumberUp=&quot;1 1&quot; HDM:Rotate=&quot;0&quot; ID=&quot;r261111085328.394_000032&quot; PartIDKeys=&quot;PageNumber&quot; PartUsage=&quot;Implicit&quot; Status=&quot;Available&quot;>&#xa;      &lt;HDM:FoldingSchema CTM=&quot;1 0 0 1 0 0&quot; HDM:MasterPageIndex=&quot;0&quot; Ord=&quot;0&quot; PageNumber=&quot;1&quot;/>&#xa;      &lt;HDM:FoldingSchema CTM=&quot;1 0 0 1 0 0&quot; HDM:MasterPageIndex=&quot;0&quot; Ord=&quot;1&quot; PageNumber=&quot;2&quot;/>&#xa;    &lt;/HDM:FoldingSchema>&#xa;    &lt;HDM:MasterPage AgentName=&quot;CIP4 JDF Writer C++&quot; AgentVersion=&quot;2.1.5BLD129&quot; Class=&quot;Parameter&quot; HDM:AutoAdjustOrientation=&quot;true&quot; ID=&quot;r261111085328.394_000033&quot; PartIDKeys=&quot;PageNumber&quot; PartUsage=&quot;Implicit&quot; Status=&quot;Available&quot;>&#xa;      &lt;HDM:MasterPage DescriptiveName=&quot;Default&quot; HDM:AutoAdjustOrientation=&quot;true&quot; HDM:Bleed=&quot;8.50400000&quot; HDM:ExtraSpace=&quot;0 0 0 0&quot; HDM:PDFTrimSizeMode=&quot;Largest&quot; HDM:ScaleXY=&quot;1 1&quot; HDM:ShiftXY=&quot;0 0&quot; HDM:Size=&quot;595.27559055 841.88976378&quot; HDM:SizeName=&quot;FromPDF&quot; HDM:SizePolicy=&quot;Fit&quot; HDM:SwapLeftRightForEvenPages=&quot;false&quot; HDM:SwapTopBottomForEvenPages=&quot;false&quot; PageNumber=&quot;1&quot;/>&#xa;    &lt;/HDM:MasterPage>&#xa;  &lt;/ResourcePool>&#xa;  &lt;ResourceLinkPool>&#xa;    &lt;LayoutPreparationParamsLink CombinedProcessIndex=&quot;0&quot; Usage=&quot;Input&quot; rRef=&quot;r261111085328.392_000030&quot;/>&#xa;    &lt;MediaLink CombinedProcessIndex=&quot;0&quot; ProcessUsage=&quot;Paper&quot; Usage=&quot;Input&quot; rRef=&quot;r261111085328.393_000031&quot;/>&#xa;    &lt;HDM:FoldingSchemaLink CombinedProcessIndex=&quot;0&quot; Usage=&quot;Input&quot; rRef=&quot;r261111085328.394_000032&quot;/>&#xa;    &lt;HDM:MasterPageLink CombinedProcessIndex=&quot;0&quot; Usage=&quot;Input&quot; rRef=&quot;r261111085328.394_000033&quot;/>&#xa;  &lt;/ResourceLinkPool>&#xa;&lt;/JDF>"/>
+      </LayoutPreparationParams>
+    </LayoutPreparationParams>
+    <ProofingParams Class="Parameter" HDM:Sides="TwoSidedFlipY" ID="Link_261111_085228593_001447"
+      Locked="true" Status="Available"/>
+    <RenderingParams Class="Parameter" ColorantDepth="8" HDM:EdgeEnhancement="false"
+      HDM:ThinLineEnhancement="false" ID="Link_261111_085228571_001429" Locked="true" Status="Available">
+      <ObjectResolution AntiAliasing="None" CompositeOverprint="true" Resolution="1200 1200" SourceObjects="All"/>
+      <AutomatedOverPrintParams HDM:OverPrintBlack="false" LineArtBlackLevel="0.9"
+        OverPrintBlackLineArt="false" OverPrintBlackText="false" TextBlackLevel="0.9"/>
+    </RenderingParams>
+    <HDM:SheetInfo Class="Parameter" ID="Link_261111_085228593_001448" Locked="true" Status="Available"/>
+    <Media Class="Consumable" ID="Link_261111_085228593_001449" Locked="true" MediaType="Paper" Status="Available"/>
+    <TransferCurvePool Class="Parameter" ID="Link_261111_085228593_001450" Locked="true" Status="Available"/>
+    <ColorCorrectionParams Class="Parameter" ID="Link_261111_085031696_000970" Locked="true" Status="Available">
+      <ColorCorrectionOp AdjustContrast="0.0" AdjustCyanRed="0.0" AdjustHue="0.0"
+        AdjustLightness="0.0" AdjustMagentaGreen="0.0" AdjustSaturation="0.0" AdjustYellowBlue="0.0"/>
+    </ColorCorrectionParams>
+    <NodeInfo Class="Parameter" ID="r_231117_131505805_000051" Locked="true" NaturalLang="en"
+      NodeStatus="Waiting" PartUsage="Implicit" SpawnIDs="Sp_261111_085344968_059436"
+      SpawnStatus="SpawnedRO" Status="Available">
+      <Employee DescriptiveName="Brooke Brooke Armsden" Roles="CSR">
+        <Person DescriptiveName="Brooke Brooke Armsden" FamilyName="Brooke Armsden" FirstName="Brooke">
+          <ComChannel ChannelType="Email" Locator="brooke@sunnyland.com.au"/>
+        </Person>
+      </Employee>
+    </NodeInfo>
+    <CustomerInfo AgentName="CIP4 JDF Writer C++" AgentVersion="2.1.5BLD129" Class="Parameter"
+      CustomerID="B1" CustomerJobName="CCSA Xmas Wave 1 - Lift 1 6pp DL Rat"
+      CustomerOrderID="064238" ID="r261111085014.689_001182" Locked="true" PartUsage="Implicit"
+      SpawnIDs="Sp_261111_085344968_059436" SpawnStatus="SpawnedRO" Status="Available" rRefs="Link_261111_085031546_000685 Link_261111_085036075_001155 Link_261111_085036179_001156">
+      <GeneralID IDUsage="RemoteAccessID" IDValue="0"/>
+      <ContactRef rRef="Link_261111_085036075_001155"/>
+      <ContactRef rRef="Link_261111_085036179_001156"/>
+    </CustomerInfo>
+    <Contact Class="Parameter" ContactTypes="Customer" ID="Link_261111_085036075_001155"
+      Locked="true" SpawnIDs="Sp_261111_085344968_059436" SpawnStatus="SpawnedRO" Status="Unavailable">
+      <Person/>
+      <Company DescriptiveName="Brooke" OrganizationName="Brooke"/>
+    </Contact>
+    <Contact Class="Parameter" ContactTypes="CustomerSalesRepresentative"
+      ID="Link_261111_085036179_001156" Locked="true" SpawnIDs="Sp_261111_085344968_059436"
+      SpawnStatus="SpawnedRO" Status="Unavailable">
+      <Person FamilyName="Brooke Armsden" FirstName="Brooke">
+        <ComChannel ChannelType="Email" Locator="brooke@sunnyland.com.au"/>
+      </Person>
+    </Contact>
+    <NodeInfo Class="Parameter" ID="Link_261111_085228550_001420" Locked="true" NaturalLang="en"
+      NodeStatus="Waiting" PartUsage="Implicit" SpawnIDs="Sp_261111_085344968_059436" Status="Available"/>
+    <RunList Class="Parameter" Directory="file://PPMS/PTJobs/Jobs/2026-11-11/064238/Sheets/FSWDS"
+      HDM:Disposition="Delete" ID="Link_261111_085228555_001424" PartIDKeys="Run"
+      PartUsage="Implicit" Status="Unavailable">
+      <HDM:FileNamePattern Pattern="$[JobNumber]_$[Input:+57WS]_$[Date]_$[Time].pdf"/>
+      <HDM:FileNamePattern Pattern="$[JobNumber]_$[Date]_$[Time].pdf"/>
+      <HDM:FileNamePattern Pattern="$[Input:+57WS]_$[Date]_$[Time].pdf"/>
+      <HDM:FileNamePattern Pattern="$[Date]_$[Time].pdf"/>
+      <pt:BaseLocID Attribute="Directory" Name="JobHome"/>
+      <RunList HDM:PgPlIdx="0 ~ 1" HDM:Sides="TwoSidedFlipY" LogicalPage="0" NPage="2" Pages="0 ~ 1"
+        Run="Run_261111_085342756_001581" SpawnIDs="Sp_261111_085344968_059436" Status="Available">
+        <LayoutElement>
+          <FileSpec Disposition="Delete" MimeType="application/pdf" URL="file://PPMS/PTJobs/Jobs/2026-11-11/064238/Sheets/FSWDS/064238_CCSA%20Xmas%20Wave%201%20-%20Lift%201%206pp%20DL%20Rat_pdf_2026-11-11_08-53-43.pdf"/>
+        </LayoutElement>
+      </RunList>
+    </RunList>
+    <HDM:ReportList Class="Parameter"
+      Directory="file://PPMS/PTJobs/Jobs/2026-11-11/064238/RendererReports/FSWDS"
+      HDM:Disposition="Delete" ID="Link_261111_085228573_001441"
+      SpawnIDs="Sp_261111_085344968_059436" Status="Unavailable">
+      <HDM:FileNamePattern Pattern="$[JobNumber]_$[Input:+49WS]_p$[Page:+10]_rep.xml"/>
+      <HDM:FileNamePattern Pattern="$[JobNumber]_$[Input:+54WS]_rep.xml"/>
+      <pt:BaseLocID Attribute="Directory" Name="JobHome"/>
+    </HDM:ReportList>
+    <HDM:ReportList Class="Parameter"
+      Directory="file://PPMS/PTJobs/Jobs/2026-11-11/064238/RendererReports/FSWDS"
+      HDM:Disposition="Delete" ID="Link_261111_085228576_001442"
+      SpawnIDs="Sp_261111_085344968_059436" Status="Unavailable">
+      <HDM:FileNamePattern Pattern="$[JobNumber]_$[Input:+49WS]_p$[Page:+10]_CTS.xml"/>
+      <HDM:FileNamePattern Pattern="$[JobNumber]_$[Input:+54WS]_CTS.xml"/>
+      <pt:BaseLocID Attribute="Directory" Name="JobHome"/>
+    </HDM:ReportList>
+    <Component Class="Quantity" ComponentType="FinalProduct" ID="Link_261111_085228577_001443"
+      PartIDKeys="Run" Status="Unavailable">
+      <Component Run="Run_261111_085342756_001581" SpawnIDs="Sp_261111_085344968_059436"/>
+    </Component>
+    <RunList Class="Parameter"
+      Directory="file://PPMS/PTJobs/Jobs/2026-11-11/064238/PageProofs/FSWDS/D"
+      HDM:Disposition="Delete" ID="Link_261111_085228577_001444" PartUsage="Implicit"
+      SpawnIDs="Sp_261111_085344968_059436" Status="Unavailable">
+      <HDM:FileNamePattern Pattern="$[Input:+90WS]"/>
+      <pt:BaseLocID Attribute="Directory" Name="JobHome"/>
+    </RunList>
+  </ResourcePool>
+  <ResourceLinkPool>
+    <NodeInfoLink Usage="Input" rRef="Link_261111_085228573_001440">
+      <Part Run="Run_261111_085342756_001581"/>
+    </NodeInfoLink>
+    <RunListLink CombinedProcessIndex="0" DraftOK="true" HDM:ElementKind="Unknown" MinStatus="Draft"
+      ProcessUsage="Document" Usage="Input" rRef="Link_261111_085228555_001424">
+      <Part Run="Run_261111_085342756_001581"/>
+    </RunListLink>
+    <HDM:ReportListLink CombinedProcessIndex="1" HDM:ElementKind="RendererReport"
+      ProcessUsage="Report" Usage="Output" rRef="Link_261111_085228573_001441"/>
+    <HDM:ReportListLink CombinedProcessIndex="1" HDM:ElementKind="RendererReport"
+      ProcessUsage="CTSError" Usage="Output" rRef="Link_261111_085228576_001442"/>
+    <ComponentLink CombinedProcessIndex="1" HDM:ElementKind="PrintedSheet" HDM:SupSubAmount="true"
+      ProcessUsage="PrintedSheets" Usage="Output" rRef="Link_261111_085228577_001443">
+      <AmountPool>
+        <PartAmount Amount="1">
+          <Part Condition="Good" Run="Run_261111_085342756_001581"/>
+        </PartAmount>
+      </AmountPool>
+      <Part Run="Run_261111_085342756_001581"/>
+    </ComponentLink>
+    <RunListLink CombinedProcessIndex="1" HDM:ElementKind="Unknown" Usage="Output" rRef="Link_261111_085228577_001444">
+      <Part Run="Run_261111_085342756_001581"/>
+    </RunListLink>
+    <HDM:ImposerParamsLink CombinedProcessIndex="0 1" Usage="Input" rRef="Link_261111_085228572_001432"/>
+    <ColorantControlLink CombinedProcessIndex="1" Usage="Input" rRef="Link_261111_085228592_001445">
+      <Part Run="Run_261111_085342756_001581"/>
+    </ColorantControlLink>
+    <ColorSpaceConversionParamsLink CombinedProcessIndex="1" Usage="Input" rRef="Link_261111_085228570_001426"/>
+    <DeviceLink CombinedProcessIndex="1" Usage="Input" rRef="Link_261111_085228572_001436"/>
+    <DigitalPrintingParamsLink CombinedProcessIndex="1" Usage="Input" rRef="Link_261111_085228571_001431">
+      <Part Run="Run_261111_085342756_001581"/>
+    </DigitalPrintingParamsLink>
+    <HDM:DeviceColorControlLink CombinedProcessIndex="1" Usage="Input" rRef="Link_261111_085228572_001433"/>
+    <InterpretingParamsLink CombinedProcessIndex="1" Usage="Input" rRef="Link_261111_085228571_001428"/>
+    <LayoutPreparationParamsLink CombinedProcessIndex="1" Usage="Input" rRef="Link_261111_085228562_001425">
+      <Part Run="Run_261111_085342756_001581"/>
+    </LayoutPreparationParamsLink>
+    <ProofingParamsLink CombinedProcessIndex="1" Usage="Input" rRef="Link_261111_085228593_001447"/>
+    <RenderingParamsLink CombinedProcessIndex="1" Usage="Input" rRef="Link_261111_085228571_001429"/>
+    <HDM:SheetInfoLink CombinedProcessIndex="1" Usage="Input" rRef="Link_261111_085228593_001448"/>
+    <MediaLink CombinedProcessIndex="1" Usage="Input" rRef="Link_261111_085228593_001449"/>
+    <TransferCurvePoolLink CombinedProcessIndex="1" Usage="Input" rRef="Link_261111_085228593_001450"/>
+    <ColorCorrectionParamsLink Usage="Input" rRef="Link_261111_085031696_000970"/>
+  </ResourceLinkPool>
+  <AuditPool/>
+  <AncestorPool>
+    <Part Run="Run_261111_085342756_001581"/>
+    <Ancestor Activation="Active" DescriptiveName="CCSA Xmas Wave 1 - Lift 1 6pp DL Rat"
+      FileName="http://PPMS:6311/StorageService-J/Storage/PRJOBS/2026-11-11/CCSA%20Xmas%20Wave%201%20-%20Lift%201%206pp%20DL%20Rat(064238)"
+      HDM:FormatVersion="1.4" HDM:GlobalJobStatus="Active" HDM:JobType="Production" JobID="064238"
+      JobPartID="n_231117_131505805_002370" MaxVersion="1.6" NodeID="_231117_131505805_000050"
+      RelatedJobID="Smart_HF" Status="InProgress" Type="Product" Version="1.3"
+      xmlns="http://www.CIP4.org/JDFSchema_1_1" xmlns:EV="http://www.engview.com/schema/EV"
+      xmlns:pt="PT:Config1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <NodeInfoRef rRef="r_231117_131505805_000051"/>
+      <CustomerInfoRef rRef="r261111085014.689_001182"/>
+      <GeneralID IDUsage="ProductionType" IDValue="D7-FSW-PHR-"/>
+    </Ancestor>
+    <Ancestor DescriptiveName="FSWDS" HDM:SequenceID="PP0" HDM:SequenceType="PagePrint"
+      JobPartID="PP0" NodeID="Link_261111_085228549_001419" Status="Waiting" Type="ProcessGroup" Version="1.3">
+      <NodeInfoRef rRef="Link_261111_085228550_001420"/>
+    </Ancestor>
+    <Ancestor HDM:Cluster="HP Indigo 7900 on PPMS" HDM:GuessedTime="100.0" HDM:HiddenStepIDs="Im Tr"
+      HDM:StepIDs="Im P" HDM:ToolID="D" HDM:ToolType="DigitalPagePrinter" JobPartID="PP0.D"
+      NodeID="Link_261111_085228572_001439" Status="Part" Type="Combined"
+      Types="Imposition DigitalPrinting" Version="1.3"/>
+  </AncestorPool>
+</JDF>

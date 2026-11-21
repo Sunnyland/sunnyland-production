@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Shape of the HP Production Pro returnJDFTicket for queue entry 82f36c76 (J064238 IP0.D), with the counts read on 21 Nov 2026. -->
+<JDF xmlns="http://www.CIP4.org/JDFSchema_1_1" JobID="064238" JobPartID="IP0.D" Status="Completed" Type="Combined" Types="DigitalPrinting">
+  <ResourceLinkPool>
+    <UsageCounterLink ActualAmount="392" rRef="u1"/>
+    <MediaLink ActualAmount="46" rRef="m1"/>
+    <UsageCounterLink ActualAmount="392" rRef="u2">
+      <AmountPool>
+        <PartAmount ActualAmount="0"><Part Condition="Waste"/></PartAmount>
+        <PartAmount ActualAmount="1"><Part Side="Front"/></PartAmount>
+        <PartAmount ActualAmount="1749"><Part Side="Back"/></PartAmount>
+        <PartAmount ActualAmount="1739"><Part Separation="Cyan EIM4.5"/></PartAmount>
+        <PartAmount ActualAmount="1753"><Part Separation="Magenta EIM4.5"/></PartAmount>
+        <PartAmount ActualAmount="1739"><Part Separation="Black EIM4.5"/></PartAmount>
+        <PartAmount ActualAmount="1738"><Part Separation="Yellow EIM4.5"/></PartAmount>
+      </AmountPool>
+    </UsageCounterLink>
+    <MediaLink ActualAmount="46" rRef="m2">
+      <AmountPool><PartAmount ActualAmount="870"><Part SheetName="113gsm Sovereign Silk WHITE LG"/></PartAmount></AmountPool>
+    </MediaLink>
+    <ComponentLink ActualAmount="4325" Amount="1" Usage="Output" rRef="c1"/>
+    <MediaLink ActualAmount="0" rRef="m3"/>
+  </ResourceLinkPool>
+  <ResourcePool>
+    <UsageCounter CounterID="Impressions" ID="u1"/>
+    <UsageCounter CounterID="SurfaceCounter" CounterTypes="Impressions Color HighlightColor Black OneSided TwoSided" ID="u2"/>
+    <UsageCounter CounterID="SeparationCounter" CounterTypes="Impressions Separation OneSided TwoSided" ID="u3"/>
+    <RunList NPage="4" ID="r1"/>
+  </ResourcePool>
+</JDF>

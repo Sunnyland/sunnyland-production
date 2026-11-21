@@ -3,16 +3,18 @@ import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {Store,need} from './core.mjs';
 import {PrintIQ} from './printiq.mjs';
+import {PrintIQFinish} from './printiq-finish.mjs';
 const root=fileURLToPath(new URL('.',import.meta.url));
 export function sendMail(entry){return new Promise(resolve=>{const p=spawn(process.env.PYTHON||'python3',[join(root,'mail_transport.py')],{stdio:['pipe','pipe','pipe'],windowsHide:true});let output='';p.stdout.on('data',b=>{output+=b;if(output.length>10000)p.kill();});p.stderr.resume();p.on('error',()=>resolve({state:'blocked',receipt:{reason:'Python mail transport could not start.'}}));const timeout=setTimeout(()=>p.kill(),120000);p.on('close',()=>{clearTimeout(timeout);try{const r=JSON.parse(output);need(['accepted','rejected','uncertain','blocked'].includes(r.state),'Invalid mail result.');resolve(r);}catch{resolve({state:'uncertain',receipt:{reason:'Mail process ended without a verifiable receipt.'}});}});p.stdin.on('error',()=>{});p.stdin.end(JSON.stringify({id:entry.id,event:JSON.parse(entry.body)}));});}
-export async function drain(store,{iq=new PrintIQ(),mail=sendMail}={}){
+export async function drain(store,{iq=new PrintIQ(),mail=sendMail,finish=new PrintIQFinish()}={}){
  const results=[];
  // A crashed or timed-out worker must never cause a blind resend.
  store.db.prepare("UPDATE outbox SET state='uncertain' WHERE state='sending' AND json_extract(receipt,'$.startedAt') < ?").run(new Date(Date.now()-600000).toISOString());
- const pending=store.db.prepare("SELECT * FROM outbox WHERE state='pending' ORDER BY created LIMIT 100").all();
+ // Printing-operation finishes stay pending until they are switched on for this server.
+ const pending=store.db.prepare("SELECT * FROM outbox WHERE state='pending'"+(finish.enabled?"":" AND channel<>'printiq_finish'")+" ORDER BY created LIMIT 100").all();
  for(const entry of pending){const event=JSON.parse(entry.body);if(entry.channel==='mail'&&['sample_ready','sample_reminder'].includes(event.kind)&&store.get('sample',entry.entity)?.state!=='pending'){store.db.prepare("UPDATE outbox SET state='cancelled' WHERE id=? AND state='pending'").run(entry.id);continue;}
   const changed=store.db.prepare("UPDATE outbox SET state='sending',receipt=? WHERE id=? AND state='pending'").run(JSON.stringify({startedAt:new Date().toISOString()}),entry.id);if(!changed.changes)continue;
-  let result;try{result=entry.channel==='mail'?await mail(entry):await iq.deliver(entry,store);}catch(e){result={state:'blocked',receipt:{reason:e.message}};}
+  let result;try{result=entry.channel==='mail'?await mail(entry):entry.channel==='printiq_finish'?await finish.deliver(entry):await iq.deliver(entry,store);}catch(e){result={state:'blocked',receipt:{reason:e.message}};}
   store.db.prepare("UPDATE outbox SET state=?,receipt=? WHERE id=? AND state='sending'").run(result.state,JSON.stringify(result.receipt),entry.id);results.push({id:entry.id,...result});
  }
  return results;
