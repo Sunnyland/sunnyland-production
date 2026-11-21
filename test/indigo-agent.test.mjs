@@ -28,7 +28,8 @@ function setup(t,initial=[accepted('J123')]){
     const filter=new URL('https://test.invalid/'+path).searchParams.get('$filter');
     return {value:[...filter.matchAll(/Id eq (\d+)/g)].map(m=>raw('J'+m[1]))};
   }};
-  const opts={routing:()=>routingFacts(state.cache,state.clock.getTime()),clock:()=>state.clock};
+  // Never read the live feeds on PrintCRM (/var/lib/sunnyland-production) from a test.
+  const opts={routing:()=>routingFacts(state.cache,state.clock.getTime()),clock:()=>state.clock,hourly:()=>null,watch:()=>null,printed:()=>null};
   return {s,state,iq,opts,agent:indigoPlanner(s,iq,opts)};
 }
 function release(opts,job='J123',extra={}){return {id:randomUUID(),action:'release',productionReady:true,job,stock:'Silk',finishes:'Fold',minutes:30,part:'Text',
