@@ -38,6 +38,8 @@ FOLDER_DAYS = 45
 RETRY_HOURS = 2
 GIVE_UP_DAYS = 3
 ACCEPTANCE_MINUTES = 30
+# Each run stops starting new press-ticket and Prinect reads after this long; the rest wait for the next run.
+BUDGET_SECONDS = int(os.environ.get("INDIGO_PRINTED_BUDGET", "240"))
 QID = re.compile(r"[0-9a-f]{32}")
 MAX_TICKET = 8 * 1024 * 1024
 
@@ -183,17 +185,32 @@ class Share:
                 names.append(m[1])
         return sorted(names)
 
-    def find(self, rel, filename):
-        """Path (relative) of `filename` in any sub-folder of `rel`, or None."""
+    def cockpit_files(self, rel):
+        """Every D7_<queue ID>_in.jdf under `rel` (one level of sub-folders): {file name: relative path}."""
+        found = {}
         if self.root:
             base = self.root / rel
-            hits = sorted(base.glob("*/" + filename)) if base.is_dir() else []
-            return str(hits[0].relative_to(self.root)) if hits else None
-        for folder in self.folders(rel):
-            out = self._smb('ls "' + (rel + "/" + folder + "/" + filename).replace("/", "\\") + '"')
-            if any(self.LINE.match(line) and self.LINE.match(line)[1] == filename for line in out.splitlines()):
-                return rel + "/" + folder + "/" + filename
-        return None
+            for path in (base.glob("*/D7_*_in.jdf") if base.is_dir() else []):
+                found.setdefault(path.name, str(path.relative_to(self.root)))
+            return found
+        # One connection per job folder: a recursive listing prints each sub-folder as a \path line, then its files.
+        out = self._smb('recurse ON; prompt OFF; cd "' + rel.replace("/", "\\") + '"; ls D7_*_in.jdf', timeout=60)
+        folder = None
+        for line in out.splitlines():
+            if line.startswith("\\"):
+                folder = line.strip().strip("\\").replace("\\", "/")
+                continue
+            m = self.LINE.match(line)
+            if m and folder and m[1].startswith("D7_") and m[1].endswith("_in.jdf"):
+                found.setdefault(m[1], folder + "/" + m[1])
+        if not found:
+            # Fallback if this smbclient prints recursive listings differently: one listing per sub-folder.
+            for sub in self.folders(rel):
+                for line in self._smb('ls "' + (rel + "/" + sub).replace("/", "\\") + '\\D7_*_in.jdf"').splitlines():
+                    m = self.LINE.match(line)
+                    if m and m[1].startswith("D7_") and m[1].endswith("_in.jdf"):
+                        found.setdefault(m[1], rel + "/" + sub + "/" + m[1])
+        return found
 
     def read(self, rel):
         if self.root:
@@ -223,9 +240,12 @@ def job_folders(share, job, submitted, listing):
                 yield "Jobs/" + name + "/" + folder
 
 
-def read_imposition(share, job, qid, submitted, listing):
+def read_imposition(share, job, qid, submitted, listing, files=None):
+    files = files if files is not None else {}
     for folder in job_folders(share, job, submitted, listing):
-        found = share.find(folder + "/RendererReports", "D7_" + qid + "_in.jdf")
+        if folder not in files:
+            files[folder] = share.cockpit_files(folder + "/RendererReports")
+        found = files[folder].get("D7_" + qid + "_in.jdf")
         if found:
             result = parse_imposition(share.read(found))
             result["output"] = found.split("/")[-2]
@@ -306,13 +326,19 @@ def collect(now, state=src.STATE, share=None, ticket=fetch_ticket, reader=None, 
     memo = memo if memo is not None else {"schema": 1, "tickets": {}, "impositions": {}, "jobs": {}}
     health = {"center": {"ok": True, "reason": None}, "cockpit": {"ok": True, "reason": None}, "printiq": {"ok": True, "reason": None}}
     entries = recent_entries(state, now)
-    listing = {}
+    listing, files = {}, {}
+    started = datetime.now(timezone.utc)
+    over = lambda: (datetime.now(timezone.utc) - started).total_seconds() > BUDGET_SECONDS
+    # Newest first, so today's work is read before the backlog.
+    entries.sort(key=lambda e: e["submitted"], reverse=True)
     try:
         share = share or Share()
     except OSError as error:
         share, health["cockpit"] = None, {"ok": False, "reason": str(error)}
     for e in entries:
         q = e["queueEntryId"]
+        if over():
+            break
         if q not in memo["tickets"]:
             try:
                 memo["tickets"][q] = ticket(q)
@@ -323,7 +349,7 @@ def collect(now, state=src.STATE, share=None, ticket=fetch_ticket, reader=None, 
             and now - datetime.fromisoformat(known["missingSince"]) <= timedelta(days=GIVE_UP_DAYS)
         if e["fromCockpit"] and share and (known is None or retry):
             try:
-                found = read_imposition(share, e["job"], q, e["submitted"], listing)
+                found = read_imposition(share, e["job"], q, e["submitted"], listing, files)
                 memo["impositions"][q] = {"found": found, "checkedAt": now.isoformat(),
                                           "missingSince": None if found else (known or {}).get("missingSince") or now.isoformat()}
             except (OSError, ValueError, ET.ParseError) as error:
