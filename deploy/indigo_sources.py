@@ -27,6 +27,10 @@ RESETS = {"DigitalArtArrived", "PageProofed", "PageProductionRejected", "PageRej
 # Twenty comparisons passed on the live Jobs endpoint. Each job uses both spellings.
 JOBS_PER_LOOKUP = 10
 
+QUEUED = "In the Indigo queue"
+# Open jobs due within this many days are read even before approval, for approval reminders.
+DUE_WINDOW_DAYS = 14
+
 class SourceHTTPError(RuntimeError):
     def __init__(self, stage, status):
         super().__init__(f"printIQ {stage} returned HTTP {status}")
@@ -153,7 +157,7 @@ def press_evidence(entries,snapshot,now):
         if job and not proof:
             # A queue entry can have a prior submission and a later physical end. A missing end is uncertain.
             risks[job].append({"at":max([t.isoformat() for t in (printed,submitted) if t],default=None),
-                "reason":"Indigo output needs reconciliation" if observed else "Existing Indigo queue entry needs reconciliation"})
+                "reason":"Indigo output needs reconciliation" if observed else QUEUED})
     return history,risks
 
 def load_press(now):
@@ -246,18 +250,14 @@ def project(job,remote,data,approval,risks,cache,now):
         raise ValueError("Exact accepted product changed")
     status=str(p.get("StatusName") or p.get("Status") or "").strip().lower()
     result={"job":job,"printiqId":remote["Id"],"name":remote.get("JobTitle") or job,"due":remote.get("DueDate") or p.get("DueDate"),
-            "approvedAt":approval.get("approvedAt"),"state":"open","runs":[]}
+            "approvedAt":approval.get("approvedAt"),"rep":remote.get("rep"),"state":"open","runs":[]}
     if remote.get("CompletedDate") or status in {"complete","completed"}:
         result["state"]="complete";return result
     if status in {"cancelled","canceled"}:result["state"]="cancelled";return result
     if facts["issues"]:result["state"]="Check accepted Printing sections";return result
     indigo=[op for op in facts["printingOperations"] if op["pressKey"]==64]
     if not indigo:result["state"]="other press";return result
-    if not approval.get("approved"):result["state"]="Awaiting current artwork approval";return result
-    if re.search(r"hold|reject|cancel|awaiting approval|proof required",status):result["state"]="Check printIQ production status";return result
-    if approval.get("source")=="printIQ approval status" and status not in APPROVED_NAMES:
-        result["state"]="Approval status changed";return result
-    if risks:result["state"]=risks[0]["reason"];return result
+    # Runs are worked out for every Indigo job, approved or not, so the agent can judge approval deadlines.
     mid=p["MiddlewareProductDetail"]
     for op in indigo:
         section=next(s for s in mid["Sections"] if s.get("QQDSKey")==op["quotedSectionKey"] and s.get("QPressKey")==64)
@@ -273,6 +273,15 @@ def project(job,remote,data,approval,risks,cache,now):
             "part":section.get("PSSectionDescription") or "Section "+str(op["acceptedSectionKey"]),
             "stock":" ".join(str(s) for s in (stock,size) if s) if stock else "","finishes":", ".join(finishes) or "None",
             "finishOps":[{"name":n} for n in finishes],"minutes":minutes,"estimateIssue":issue})
+    # Being in the Indigo queue is expected once a job is approved. Only observed printed output needs a check.
+    risks=list(risks or [])
+    result["inIndigoQueue"]=any(r["reason"]==QUEUED for r in risks)
+    printed=[r for r in risks if r["reason"]!=QUEUED]
+    if not approval.get("approved"):result["state"]="Awaiting current artwork approval";return result
+    if re.search(r"hold|reject|cancel|awaiting approval|proof required",status):result["state"]="Check printIQ production status";return result
+    if approval.get("source")=="printIQ approval status" and status not in APPROVED_NAMES:
+        result["state"]="Approval status changed";return result
+    if printed:result["state"]=printed[0]["reason"];return result
     return result
 
 # Routing lines that are not finishing work after the press: prepress, stock draws, proofs, charges,
@@ -281,10 +290,10 @@ NOT_FINISHING=re.compile(r"^printing$|\b(auto to press|preflight|imposition|stoc
     r"cartons?|freight|courier|plate for|concept|design|layout|artwork|die library|no guillo)",re.I)
 
 APPROVED_NAMES={"artwork approved","proof approved","approved for print","approved for printing","approved for production"}
-FIELDS="Id,QuotedProductDetailId,JobNo,JobTitle,DueDate,CompletedDate,ProductionStatusId"
+FIELDS="Id,QuotedProductDetailId,JobNo,JobTitle,DueDate,CompletedDate,ProductionStatusId,AccountManagerId"
 
-def read_jobs(opener,key,params):
-    req=Request("https://sunnyland.printiq.com/api/v1/odata/Jobs?"+urlencode(params),headers={"PrintIQ-Access-Token":key,"Accept":"application/json"})
+def read_jobs(opener,key,params,entity="Jobs"):
+    req=Request("https://sunnyland.printiq.com/api/v1/odata/"+entity+"?"+urlencode(params),headers={"PrintIQ-Access-Token":key,"Accept":"application/json"})
     with opener.open(req,timeout=25) as resp:
         raw=resp.read(1_000_001)
         if len(raw)>1_000_000:raise ValueError("Jobs reply too large")
@@ -323,6 +332,36 @@ def directory_approved(read,ids):
             if key:jobs[key]=r if key not in jobs else None
         if not data["value"] or (len(data["value"])<50 and not data.get("@odata.nextLink")):break
     return jobs
+
+def directory_due(read,now,days=DUE_WINDOW_DAYS):
+    """Open jobs due from a week ago to `days` ahead, whatever their approval status."""
+    jobs={};cursor=0
+    low=(now-timedelta(days=7)).strftime("%Y-%m-%dT00:00:00Z");high=(now+timedelta(days=days)).strftime("%Y-%m-%dT00:00:00Z")
+    while True:
+        data=read({"$filter":"CompletedDate eq null and DueDate ge "+low+" and DueDate lt "+high+" and Id gt "+str(cursor),
+                   "$select":FIELDS,"$orderby":"Id asc","$top":"50"})
+        for r in data["value"]:
+            if type(r.get("Id")) is not int or r["Id"]<=cursor:raise ValueError("Ambiguous due-soon Jobs page")
+            cursor=r["Id"]
+            key=directory_key(r["JobNo"])
+            if key:jobs[key]=r if key not in jobs else None
+        if not data["value"] or (len(data["value"])<50 and not data.get("@odata.nextLink")):break
+    return jobs
+
+GUID=re.compile(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}",re.I)
+EMAIL=re.compile(r"[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+")
+
+def account_managers(read_users,ids):
+    """printIQ account managers (the job's rep): id -> {name, email}. Unknown ids are left out."""
+    found={};ids=sorted({i for i in ids if isinstance(i,str) and GUID.fullmatch(i)})
+    for i in range(0,len(ids),JOBS_PER_LOOKUP):
+        group=ids[i:i+JOBS_PER_LOOKUP]
+        data=read_users({"$filter":" or ".join("Id eq "+g for g in group),"$select":"Id,FirstName,Surname,Email","$top":str(len(group))})
+        for u in data["value"]:
+            if u.get("Id") in group:
+                email=u["Email"] if isinstance(u.get("Email"),str) and EMAIL.fullmatch(u["Email"]) else None
+                found[u["Id"]]={"name":" ".join(x for x in (u.get("FirstName"),u.get("Surname")) if x) or None,"email":email}
+    return found
 
 def odata(jobs,read):
     found={}
@@ -365,8 +404,17 @@ def collect(now):
         directory_error=str(exc)+"."
     except (OSError,ValueError,KeyError):
         directory_error="printIQ approval-status discovery unavailable."
-    jobs=sorted(numbers|set(directory))
+    due_soon={}
+    try: due_soon=checked_read("due-soon jobs list",directory_due,read,now)
+    except (SourceHTTPError,OSError,ValueError,KeyError):due_soon={}
+    jobs=sorted(numbers|set(directory)|{j for j,r in due_soon.items() if r})
     mis=checked_read("planning job-number lookup",odata,jobs,read)
+    try:
+        reps=account_managers(lambda params:read_jobs(reader.opener,credential["apiKey"],params,"Users"),
+                              [r.get("AccountManagerId") for r in mis.values() if r])
+    except (SourceHTTPError,OSError,ValueError,KeyError):reps={}
+    for r in mis.values():
+        if r and r.get("AccountManagerId") in reps:r["rep"]=reps[r["AccountManagerId"]]
     # Carry every local job that can appear in Samples, on a board, or in a staff picker.
     # These need only a bounded Jobs lookup, never an acceptance fetch for scheduling.
     with sqlite3.connect((STATE.parent/"production.sqlite").as_uri()+"?mode=ro",uri=True) as db:

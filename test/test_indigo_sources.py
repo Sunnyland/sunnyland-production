@@ -175,7 +175,13 @@ class Projection(unittest.TestCase):
               {'QQDSKey':404,'POOperationName':'Plate for Ryobi 754'},{'QQDSKey':None,'POOperationName':'Dispatch'}]}}
         raw=({'AcceptanceDetails':{'Products':[prod]}},'digest')
         def run(approval=True,risks=()):return m.project(job,remote,raw,{'approved':approval},risks,Cache,NOW)
-        self.assertEqual(run(False)['runs'],[])
+        # Unapproved jobs keep their runs so the agent can judge the approval deadline, but are not open.
+        waiting=run(False);self.assertEqual(waiting['state'],'Awaiting current artwork approval');self.assertEqual(len(waiting['runs']),1)
+        # A queue entry means the job is on the press: still open for planning, and marked.
+        queued=run(True,[{'reason':m.QUEUED}]);self.assertEqual(queued['state'],'open');self.assertTrue(queued['inIndigoQueue'])
+        self.assertFalse(run()['inIndigoQueue'])
+        self.assertEqual(run(True,[{'reason':m.QUEUED},{'reason':'Indigo output needs reconciliation'}])['state'],'Indigo output needs reconciliation')
+        remote['rep']={'name':'Paul Cocks','email':'paul@sunnyland.com.au'};self.assertEqual(run()['rep']['email'],'paul@sunnyland.com.au');del remote['rep']
         self.assertEqual(run(True,[{'reason':'Check press output'}])['state'],'Check press output')
         runs=run()['runs'];self.assertEqual(len(runs),1);self.assertEqual((runs[0]['stock'],runs[0]['finishes'],runs[0]['minutes']),('ABC 320x450','Fold, Handwork Glue',19))
         self.assertEqual(runs[0]['finishOps'],[{'name':'Fold'},{'name':'Handwork Glue'}])
@@ -189,3 +195,27 @@ class Projection(unittest.TestCase):
         prod['StatusName']='Complete';self.assertEqual(run()['state'],'complete');self.assertFalse(run()['runs'])
         remote['QuotedProductDetailId']=99
         with self.assertRaises(ValueError):run()
+
+class Reps(unittest.TestCase):
+    def test_account_managers_are_read_in_batches_and_only_valid_emails_kept(self):
+        calls=[]
+        users={"10dd3b94-f864-44b3-9cc6-e2f866651901":{"Id":"10dd3b94-f864-44b3-9cc6-e2f866651901","FirstName":"Paul","Surname":"Cocks","Email":"paul@sunnyland.com.au"},
+               "20dd3b94-f864-44b3-9cc6-e2f866651901":{"Id":"20dd3b94-f864-44b3-9cc6-e2f866651901","FirstName":"No","Surname":"Mail","Email":"not an email"}}
+        def read(params):
+            calls.append(params["$filter"]);return {"value":[u for k,u in users.items() if k in params["$filter"]]}
+        found=m.account_managers(read,list(users)+[None,"bad-id","10dd3b94-f864-44b3-9cc6-e2f866651901"])
+        self.assertEqual(len(calls),1)
+        self.assertNotIn("'",calls[0])
+        self.assertEqual(found["10dd3b94-f864-44b3-9cc6-e2f866651901"],{"name":"Paul Cocks","email":"paul@sunnyland.com.au"})
+        self.assertIsNone(found["20dd3b94-f864-44b3-9cc6-e2f866651901"]["email"])
+
+    def test_due_soon_discovery_pages_open_jobs_in_the_window(self):
+        pages=[{"value":[{"Id":5,"JobNo":"064900"},{"Id":9,"JobNo":"J064901"}]},{"value":[]}]
+        seen=[]
+        def read(params):
+            seen.append(params["$filter"]);return pages[len(seen)-1]
+        found=m.directory_due(read,NOW)
+        self.assertEqual(sorted(found),["J064900","J064901"])
+        # A short first page is the last page.
+        self.assertEqual(len(seen),1)
+        self.assertIn("CompletedDate eq null",seen[0]);self.assertIn("DueDate lt 2026-12-04T00:00:00Z",seen[0]);self.assertIn("Id gt 0",seen[0])

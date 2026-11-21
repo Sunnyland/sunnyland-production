@@ -21,6 +21,13 @@ def send(payload, env=os.environ, smtp_factory=None):
             return {'state':'blocked','receipt':{'reason':'Invalid verification code.'}}
         msg['Subject']='Your Sunnyland Press sample review code'
         msg.set_content('Your code for the sample on job '+event['job']+' is '+event['code']+'. It expires in 10 minutes. If you did not request this code, you can ignore this email.')
+    elif event['kind']=='production_alert':
+        # Indigo agent reminders and alerts: the service writes the subject and plain-text body.
+        subject,text=event.get('subject'),event.get('text')
+        if not isinstance(subject,str) or not isinstance(text,str) or not subject.strip() or len(subject)>200 or len(text)>5000 or re.search(r'[\r\n]',subject):
+            return {'state':'blocked','receipt':{'reason':'Invalid production alert.'}}
+        msg['Subject']=subject.strip()
+        msg.set_content(text+'\n\nSent by the Sunnyland Production Indigo agent.')
     else:
         msg['Subject']=event['job']+' - '+event['kind'].replace('_',' ')+' - '+event['title']
         msg.set_content('Job: '+event['job']+'\nSample: '+event['title']+'\nUpdate: '+event['kind'].replace('_',' ')+'\n\nOpen Sunnyland Production, select Samples and review this exact version.\nSample ID: '+event['sample']+'\n\nThe app shows the current approval state. This is a production sample review, separate from final customer proof approval.\n')

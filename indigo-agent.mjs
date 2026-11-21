@@ -5,6 +5,7 @@ import {samePrintIQJob} from './job-tickets.mjs';
 import {choosePrintDay,earliestPressStart,finishDay,indigoBookableMinutes} from './print-planning.mjs';
 import {operationEvidence,readRouting} from './production-finishes.mjs';
 import {byPriority,withFinishingPlan} from './indigo-sequence.mjs';
+import {applyWatch,readWatch} from './indigo-watch.mjs';
 
 const press='HP Indigo 7900', machine={id:'indigo-planning-agent'};
 const itemKind='indigoReadyRun', configKind='indigoPlannerConfig', runKind='printPlanRun';
@@ -68,7 +69,7 @@ function compute(store,observed,remote,facts,now){
   return rows;
 }
 
-export function indigoPlanner(store,iq,{routing=()=>readRouting(),clock=()=>new Date(),hourly=readHourlyFeed}={}){
+export function indigoPlanner(store,iq,{routing=()=>readRouting(),clock=()=>new Date(),hourly=readHourlyFeed,watch=readWatch}={}){
   let busy=false, lastError=null,lastCheck=null;
   const waiting=()=>store.all(itemKind).filter(r=>r.state==='waiting');
   const retry=(actor,key,body,fn)=>store.transaction(actor,key,{indigoPlanner:body},fn);
@@ -109,6 +110,13 @@ export function indigoPlanner(store,iq,{routing=()=>readRouting(),clock=()=>new 
         need(row.state==='waiting','This run is already published or withdrawn. Refresh the board.',409);
         row.state='withdrawn';store.put(itemKind,row);store.audit(actor,'withdraw_indigo_release',row.id,{job:row.job});
         return row;
+      }
+      if(body.action==='prepress'){
+        // The people told about prepress problems (a job not reaching the Indigo, unnumbered queue entries, connection failures).
+        need(Array.isArray(body.emails)&&body.emails.length<=20&&body.emails.every(e=>typeof e==='string'&&/^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(e.trim())),'Enter up to 20 valid email addresses.');
+        const c=config(store);need(body.revision===c.revision,'Planner settings changed. Refresh first.',409);
+        const next={...c,prepressEmails:[...new Set(body.emails.map(e=>e.trim().toLowerCase()))],revision:c.revision+1};store.put(configKind,next);
+        store.audit(actor,'configure_indigo_prepress','indigo',{prepressEmails:next.prepressEmails});return next;
       }
       need(body.action==='configure' && typeof body.enabled==='boolean','Invalid Indigo planner action.');
       const c=config(store);need(body.revision===c.revision,'Planner settings changed. Refresh first.',409);
@@ -151,14 +159,18 @@ export function indigoPlanner(store,iq,{routing=()=>readRouting(),clock=()=>new 
   async function tick(){
     if(busy)return;
     busy=true;
-    try{planHourly(store,hourly(),clock());await evaluate(true);lastError=null;}
+    let feed=null;
+    try{feed=hourly();planHourly(store,feed,clock());await evaluate(true);lastError=null;}
     catch{lastError='Could not verify the Indigo plan. The agent will retry.';}
+    // Approval reminders and press-queue alerts run even when printIQ is briefly unavailable.
+    try{applyWatch(store,{watch:watch(),feed:feed??hourly(),now:clock()});}
+    catch{lastError=(lastError?lastError+' ':'')+'Could not check approvals and the Indigo queue.';}
     finally{busy=false;lastCheck=clock().toISOString();}
   }
   async function dashboard(){
     let rows,problem=lastError;
     try{rows=await evaluate(false);}catch{rows=waiting().map(r=>({...r,day:null,reason:'Live job lookup unavailable'}));problem='Could not refresh printIQ jobs.';}
-    return {...config(store),rows,lastCheck,problem,hourly:hourlySummary(store,clock()),scheduled:store.all(itemKind).filter(r=>r.state==='scheduled' &&
+    return {...config(store),rows,lastCheck,problem,hourly:hourlySummary(store,clock()),watch:store.get('indigoWatch','latest')??null,scheduled:store.all(itemKind).filter(r=>r.state==='scheduled' &&
       store.get(runKind,r.id)?.removed!==true).slice(-12).reverse().map(r=>{const run=store.get(runKind,r.id);return {...r,day:run?.day,press:run?.press};})};
   }
   return {control,tick,dashboard,routing};

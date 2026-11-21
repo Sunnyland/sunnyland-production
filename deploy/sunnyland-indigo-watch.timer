@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Indigo approvals and press queue every 10 minutes
+
+[Timer]
+OnCalendar=*:0/10
+Persistent=true
+AccuracySec=30s
+Unit=sunnyland-indigo-watch.service
+
+[Install]
+WantedBy=timers.target

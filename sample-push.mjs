@@ -3,6 +3,7 @@ import {join} from 'node:path';
 import {readFileSync} from 'node:fs';
 import {createPrivateKey, randomUUID, sign} from 'node:crypto';
 import {need} from './core.mjs';
+import {drainProductionAlerts} from './indigo-watch.mjs';
 
 const topic = 'au.com.sunnyland.production';
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -51,7 +52,7 @@ export function appleProvider(env=process.env, openConnection=connect) {
       session.on('close',()=>{clearTimeout(timer);reject(new Error('Apple connection closed'));});
       const req=session.request({':method':'POST',':path':'/3/device/'+device.token,authorization:'bearer '+jwt,
         'apns-topic':topic,'apns-push-type':'alert','apns-priority':'10','apns-id':alert.id,
-        'apns-collapse-id':alert.sample,'apns-expiration':String(now+3600)});
+        'apns-collapse-id':alert.collapse??alert.sample,'apns-expiration':String(now+3600)});
       let status=0, body='';
       req.on('response',headers=>{status=Number(headers[':status']);});
       req.setEncoding('utf8');
@@ -61,7 +62,9 @@ export function appleProvider(env=process.env, openConnection=connect) {
         let reason;try {reason=JSON.parse(body).reason;} catch {}
         resolve({status,reason});session.close();
       });
-      req.end(JSON.stringify({aps:{alert:{title:'Sample ready for review',body:'Open Sunnyland Production to review your assigned sample.'},sound:'default'},sample:alert.sample}));
+      // Sample alerts keep their fixed wording; production alerts carry their own title and body.
+      const content=alert.sample?{title:'Sample ready for review',body:'Open Sunnyland Production to review your assigned sample.'}:{title:alert.title,body:alert.body};
+      req.end(JSON.stringify({aps:{alert:content,sound:'default'},...(alert.sample?{sample:alert.sample}:{production:true})}));
     });
   };
 }
@@ -93,7 +96,8 @@ export function startSampleAlerts(store, send) {
   const tick=async()=>{
     if(running)return;
     running=true;
-    try {await drainSampleAlerts(store,send);} catch {console.error('Sample notification queue is unavailable.');} finally {running=false;}
+    try {await drainSampleAlerts(store,send);} catch {console.error('Sample notification queue is unavailable.');}
+    try {await drainProductionAlerts(store,send);} catch {console.error('Production notification queue is unavailable.');} finally {running=false;}
   };
   void tick();
   setInterval(tick,5000).unref();

@@ -72,7 +72,7 @@ export function planHourly(store,feed,now=new Date()){
         // Finishing time from printIQ sets the latest print day; only plain values are stored on the booking.
         const {finishOps:_ops,...run}=withFinishingPlan({id:item.id,job:job.job,name:job.name,printiqId:job.printiqId,press,part:item.part,stock:item.stock,finishes:item.finishes,
           minutes:item.minutes,due:finishDay(job.due),fixedStart:null,operationKey:item.operationKey,agentOperation:item.operation,agentRelease:true,hourly:true,
-          finishOps:Array.isArray(item.finishOps)?item.finishOps:undefined,finishingMinutes:item.finishingMinutes},settings);
+          finishOps:Array.isArray(item.finishOps)?item.finishOps:undefined,finishingMinutes:item.finishingMinutes,inIndigoQueue:job.inIndigoQueue===true},settings);
         const locals=localJobs.filter(row=>jobKey(row.id)===job.job);
         let reason='';
         if(holds.has(job.job) || locals.some(local=>local.active===false || (local.printiqId && local.printiqId!==run.printiqId)))reason='Check local job status or hold';
