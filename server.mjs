@@ -57,8 +57,9 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
    if(sub==='/pin')return html(200,renderPin({key}));
    const next=url.searchParams.get('next')==='1';
    if(sub==='/week')return html(200,renderWeek(weekFor(store,{watch:boardWatch(),now,next}),{todayHref:'../'+key,otherHref:next?'week':'?next=1'}));
-   const state=shiftState(store,now);
-   const shift={...state,code:state.operator?null:boardCode(store,now).code};
+   // Sign-in shows once anyone has shift hours (until then the board stays as it was).
+   const state=store.all('staffShift').length?shiftState(store,now):null;
+   const shift=state&&{...state,code:state.operator?null:boardCode(store,now).code};
    return html(200,renderBoard(boardFor(store,{watch:boardWatch(),now}),{weekHref:key+'/week',shift,key}));
  }
  if(path==='/health'&&req.method==='GET')return send(200,{ok:true,version:'0.1.0'});

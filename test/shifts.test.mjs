@@ -165,3 +165,13 @@ test('board: sign-in panel with code and QR, PIN pad, sign out; app sign-in with
   assert.equal(overview.operator.name, 'Jacob'); assert.deepEqual(overview.today.map(x => x.from), ['7am', '3pm']);
   assert.equal((await fetch(`${base}/board/${key}/sign-out`)).status, 404);
 });
+
+test('the board shows no sign-in panel until someone has shift hours', async t => {
+  const s = new Store(); t.after(() => s.close());
+  const key = createBoardLink(s, {label: 'Indigo press'});
+  const dir = mkdtempSync(join(tmpdir(), 'shifts-'));
+  const server = createServer(s, {mediaDir: dir, allowedPeers: null, boardWatch: () => null, clock: () => at(9)});
+  await new Promise(r => server.listen(0, '127.0.0.1', r)); t.after(() => { server.close(); rmSync(dir, {recursive: true, force: true}); });
+  const page = await (await fetch(`http://127.0.0.1:${server.address().port}/board/${key}`)).text();
+  assert.doesNotMatch(page, /Nobody is signed in/); assert.match(page, /content="60"/);
+});
