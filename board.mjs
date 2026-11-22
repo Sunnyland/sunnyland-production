@@ -87,13 +87,34 @@ export function dayHours(rows, day, now) {
 }
 
 /// Pure: one day's plan with statuses, in the plan's order.
-function dayPlan({runs, blocks, day, ctx, hidden}) {
-  const rows = [...runs.filter(r => r.day === day && !hidden(r.job, r.printiqId)), ...blocks.filter(b => b.day === day)];
-  return sequencePressDay(rows.map(r => ({...r, blocked: null}))).map(r => ({id: r.id, job: r.maintenance ? '' : jobKey(r.job),
+/// One day's runs in press order. Today rolls forward: what's printing runs from when it was sent, everything not yet
+/// printed starts from now (a missed pinned time no longer holds it), and printed runs no longer take press time.
+/// Runs that no longer fit before the end of the print window are marked to move (the agent replans them).
+function dayPlan({runs, blocks, day, ctx, hidden, now = null}) {
+  const rows = [...runs.filter(r => r.day === day && !hidden(r.job, r.printiqId)), ...blocks.filter(b => b.day === day)]
+    .map(r => ({...r, blocked: null, status: statusOf(r, ctx)}));
+  const live = now && day === finishDay(now.toISOString());
+  const minute = live ? Math.ceil(plantMinute(now) / 5) * 5 : null;
+  const placed = live ? sequencePressDay(rows.filter(r => r.status.key !== 'printed').map(r => {
+    if (r.maintenance) return r;
+    if (r.status.key === 'printing') {
+      const sent = Date.parse(ctx.queueFor(jobKey(r.job))?.last ?? '');
+      const started = Number.isFinite(sent) ? Math.max(indigoStart, Math.min(minute, plantMinute(new Date(sent)))) : minute;
+      const end = Math.max(started + r.minutes, minute + 5);
+      return {...r, fixedStart: started, minutes: end - started};
+    }
+    const missed = r.fixedStart !== null && r.fixedStart !== undefined && r.fixedStart < minute;
+    return {...r, fixedStart: missed ? null : r.fixedStart, missed, earliestStart: Math.max(r.earliestStart ?? 0, minute)};
+  })).concat(rows.filter(r => r.status.key === 'printed').map(r => ({...r, start: null})))
+    : sequencePressDay(rows);
+  return placed.map(r => ({id: r.id, job: r.maintenance ? '' : jobKey(r.job),
     name: r.name ?? '', part: r.part ?? '', stock: r.stock ?? '', finishes: r.finishes ?? '', due: r.due ?? null,
     start: r.start ?? null, minutes: r.minutes, maintenance: Boolean(r.maintenance), held: Boolean(r.held),
-    anyTime: Boolean(r.maintenance && r.fixedStart === null), status: statusOf(r, ctx)}));
+    anyTime: Boolean(r.maintenance && r.fixedStart === null),
+    status: live && r.start === null && !r.held && !r.maintenance && r.status.key !== 'printed'
+      ? {...r.status, wontFit: true, detail: 'Won’t fit today — the agent moves it to the next day with room'} : r.status}));
 }
+const indigoStart = 7 * 60 + 45;
 
 /// The job printing now: the newest "Running" entry sent in the last 8 hours. Production Pro sometimes never reports
 /// a final status, so older "Running" entries (and all but the newest) only count as on the press.
@@ -137,7 +158,7 @@ export function boardData({runs, blocks = [], watch, printed, links = new Map(),
   const ctx = context({watch, printed, links, now});
   const indigo = runs.filter(r => !r.removed && r.press === boardPress);
   const mine = blocks.filter(b => b.press === boardPress);
-  const plan = dayPlan({runs: indigo, blocks: mine, day, ctx, hidden});
+  const plan = dayPlan({runs: indigo, blocks: mine, day, ctx, hidden, now});
   const work = plan.filter(r => !r.maintenance && !r.held);
   const active = work.filter(r => r.status.key !== 'printed');
   const done = work.filter(r => r.status.key === 'printed');
@@ -170,7 +191,7 @@ export function weekData({runs, blocks = [], watch, printed, links = new Map(), 
   const monday = addDays(mondayOf(day), next ? 7 : 0);
   const indigo = runs.filter(r => !r.removed && r.press === boardPress), mine = blocks.filter(b => b.press === boardPress);
   const days = [0, 1, 2, 3, 4, 5].map(n => addDays(monday, n)).map(d => {
-    const plan = dayPlan({runs: indigo, blocks: mine, day: d, ctx, hidden});
+    const plan = dayPlan({runs: indigo, blocks: mine, day: d, ctx, hidden, now});
     return {day: d, today: d === day, past: d < day, saturday: weekday(d) === 6, open: weekday(d) !== 6 || open.has(d) || plan.length > 0,
       plan, hours: dayHours(plan, d, now)};
   });
@@ -253,11 +274,11 @@ ${h.shiftLeft !== undefined ? `<span class="${h.toPrint > h.shiftLeft ? 'over' :
 }
 
 /// Today's board; refreshes itself every minute. No scripts, so it suits a kiosk browser.
-export function renderBoard(data, {weekHref = 'week', shift = null, key = '', waiting = null} = {}) {
+export function renderBoard(data, {weekHref = 'week', shift = null, key = '', waiting = null, nav = ''} = {}) {
   const updated = new Date(data.now).toLocaleTimeString('en-AU', {hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne'});
   const list = (rows, big) => rows.length ? `<ol>${rows.map(r => row(r, data.day, big)).join('')}</ol>` : '';
   const next = [...data.next, ...data.maintenance];
-  return page('Indigo board', `<header><h1>Indigo · ${esc(dayLabel(data.day))}</h1><div class="meta">${data.counts.printed} of ${data.counts.planned} printed · updated ${esc(updated)} · <a href="${esc(weekHref)}">Week</a></div></header>
+  return page('Indigo board', `<header><h1>Indigo · ${esc(dayLabel(data.day))}</h1><div class="meta">${data.counts.printed} of ${data.counts.planned} printed · updated ${esc(updated)} · <a href="${esc(weekHref)}">Week</a>${nav}</div></header>
 ${shiftPanel(shift, key)}
 ${hoursLine(data.hours)}${waitingLine(waiting)}
 ${data.problems.map(p => `<div class="problem">${esc(p)}</div>`).join('')}
@@ -306,7 +327,7 @@ ${['1', '2', '3', '4', '5', '6', '7', '8', '9', 'back', '0', 'enter'].map(button
 }
 
 /// Monday-Saturday week page.
-export function renderWeek(data, {todayHref = '.', otherHref = '?next=1', waiting = null} = {}) {
+export function renderWeek(data, {todayHref = '.', otherHref = '?next=1', waiting = null, nav = ''} = {}) {
   const card = r => `<div class="card ${r.status.key}${r.status.confirm ? ' confirm' : ''}"><div class="job">${r.maintenance ? 'Maintenance' : esc(r.job)}${tags(r.status)}</div>
 <div class="facts">${esc(r.maintenance ? `${r.name} · ${r.anyTime ? hm(r.minutes) + ' any time' : clock(r.start) + ', ' + hm(r.minutes)}` : [r.name, r.stock].filter(Boolean).join(' · '))}</div>
 <div class="facts">${esc(r.status.label)}${r.maintenance ? '' : ' · ' + hm(r.minutes)}</div></div>`;
@@ -315,7 +336,7 @@ ${d.open ? `<div class="sum">Booked <b>${hm(d.hours.booked)}</b>${d.hours.mainte
 ${d.plan.map(card).join('') || '<div class="facts">Nothing booked</div>'}` : '<div class="sum">Not open (managers can open a Saturday)</div>'}</section>`;
   const first = data.days[0].day, last = data.days[5].day;
   return page('Indigo week', `<header><h1>Indigo week · ${esc(shortDay(first))} – ${esc(shortDay(last))}</h1>
-<div class="meta"><a href="${esc(todayHref)}">Today</a> · <a href="${esc(otherHref)}">${data.next ? 'This week' : 'Next week'}</a></div></header>
+<div class="meta"><a href="${esc(todayHref)}">Today</a> · <a href="${esc(otherHref)}">${data.next ? 'This week' : 'Next week'}</a>${nav}</div></header>
 ${waitingLine(waiting)}${data.problems.map(p => `<div class="problem">${esc(p)}</div>`).join('')}
 <div class="week">${data.days.map(col).join('')}</div>${legend}`);
 }

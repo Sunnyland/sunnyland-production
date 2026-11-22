@@ -3,9 +3,9 @@ import {indigoPlanner} from './indigo-agent.mjs';
 import {readWatch} from './indigo-watch.mjs';
 import {boardFor,boardLinkValid,pressPrinting,renderBoard,renderPin,renderWeek,weekFor} from './board.mjs';
 import {notPlanned,notPlannedAction} from './not-planned.mjs';
-import {pressDays,readCookie,renderLogin,renderPlan,sessionCookie} from './plan-page.mjs';
+import {readCookie,renderLogin,renderNotPlanned,sessionCookie} from './plan-page.mjs';
 import {readHourlyFeed} from './hourly-indigo.mjs';
-import {boardCode,shiftAction,shiftOverview,shiftState,shiftTick,signInWithPin,signOut} from './shifts.mjs';
+import {boardCode,endPlanSession,planPinSession,planViewer,shiftAction,shiftOverview,shiftState,shiftTick,signInWithPin,signOut} from './shifts.mjs';
 import {planBookings,pressPlanAction} from './press-plan.mjs';
 import {checkFinish,operationEvidence,readRouting,requirementsPath} from './production-finishes.mjs';
 import {indigoCapacity, localJobDates, pressDay, savePrintRun, searchDueJobs} from './print-planning.mjs';
@@ -34,8 +34,11 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
  const jobsConfigured = () => iq.jobsConfigured ?? Boolean(iq.token);
  mkdirSync(mediaDir,{recursive:true});
  const server=http.createServer(async(req,res)=>{const send=(code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
- try{need(peerIsAllowed(req.socket.remoteAddress,allowedPeers),'Connection not permitted.',403);const url=new URL(req.url,'http://localhost'),path=url.pathname;const originHost=req.headers.origin?new URL(req.headers.origin).host:null;
- need(!originHost||path.startsWith('/board/')||originHost===req.headers.host||(path.startsWith('/plan')&&[req.headers['x-forwarded-host'],publicHost].includes(originHost)),'Cross-origin requests are not allowed.',403);
+ try{need(peerIsAllowed(req.socket.remoteAddress,allowedPeers),'Connection not permitted.',403);const url=new URL(req.url,'http://localhost'),path=url.pathname;// Browsers send "Origin: null" for some same-site form posts (privacy settings); that is not an address.
+ const origin=req.headers.origin,screens=path.startsWith('/board/')||path==='/plan'||path.startsWith('/plan/');
+ let originHost=null;if(origin&&origin!=='null'){try{originHost=new URL(origin).host;}catch{originHost='?';}}
+ // Screens and the planning page are protected by their private link / SameSite cookie, so "null" is fine there.
+ need(!origin||screens&&origin==='null'||path.startsWith('/board/')||originHost===req.headers.host||(path.startsWith('/plan')&&[req.headers['x-forwarded-host'],publicHost].includes(originHost)),'Cross-origin requests are not allowed.',403);
  if(path.startsWith('/sample-review/')) return await publicReview({req,res,url,store,mediaDir,settings:reviews});
  // Production board for screens: private link, no staff account. Refreshes itself. The link is the secret, so the
  // board's own forms (PIN pad, sign out) skip the same-origin check; they only change who is at the press.
@@ -66,34 +69,33 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
    const shift=state&&{...state,code:state.operator?null:boardCode(store,now).code};
    return html(200,renderBoard(boardFor(store,{watch:boardWatch(),now}),{weekHref:key+'/week',shift,key,waiting:notPlanned(store,hourlyFeed(),now).counts}));
  }
- // Manager plan page (signed in): the Not planned list with Add to a day, Fix and Ignore.
+ // Production planning page (read only): PIN sign-in, then Today, Week and Not planned. Managers change the plan in PrintCRM.
  if(path==='/plan'||path.startsWith('/plan/')){
-   const html=(code,body,extra={})=>{res.writeHead(code,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",...extra});res.end(body);};
+   const m=/^\/plan(\/week|\/not-planned|\/login|\/logout)?$/.exec(path);need(m,'Not found.',404);
+   const sub=m[1]??'',now=clock();
+   const html=(code,body,extra={})=>{res.writeHead(code,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",...extra});res.end(body);};
    const go=(to,extra={})=>{res.writeHead(303,{Location:to,'Cache-Control':'no-store',...extra});res.end();};
-   const now=clock();let form=new URLSearchParams();
-   if(req.method==='POST'){const parts=[];let size=0;for await(const part of req){size+=part.length;need(size<=8192,'Request is too large.',413);parts.push(part);}form=new URLSearchParams(Buffer.concat(parts).toString('utf8'));}
-   else need(req.method==='GET'&&path==='/plan','Not found.',404);
-   if(path==='/plan/login'){
-     need(req.method==='POST','Not found.',404);
-     try{const {token,user}=store.login(form.get('email')??'',form.get('password')??'');
-       if(user.role!=='manager'){store.logout(token);return html(403,renderLogin('This page is for managers.'));}
-       return go('../plan',{'Set-Cookie':sessionCookie(token,req)});}
+   const token=readCookie(req);
+   if(req.method==='POST'){
+     need(sub==='/login'||sub==='/logout','Not found.',404);
+     const parts=[];let size=0;for await(const part of req){size+=part.length;need(size<=1024,'Request is too large.',413);parts.push(part);}
+     if(sub==='/logout'){endPlanSession(store,token);return go('../plan',{'Set-Cookie':sessionCookie('',req,0)});}
+     const pin=new URLSearchParams(Buffer.concat(parts).toString('utf8')).get('pin')??'';
+     const place=String(req.headers['x-forwarded-for']??'').split(',')[0].trim()||req.socket.remoteAddress||'unknown';
+     try{const {token:t}=planPinSession(store,place,pin,now);return go('../plan',{'Set-Cookie':sessionCookie(t,req)});}
      catch(e){if(!(e instanceof Fault))throw e;return html(e.status||401,renderLogin(e.message));}
    }
-   const token=readCookie(req);let user=null;
-   try{user=store.auth(token);store.manager(user);}catch(e){if(!(e instanceof Fault))throw e;user=null;}
-   if(path==='/plan/logout'){if(token)store.logout(token);return go('../plan',{'Set-Cookie':sessionCookie('',req,0)});}
-   if(!user)return req.method==='GET'?html(200,renderLogin()):go('../plan');
-   if(path==='/plan/action'){
-     const body=Object.fromEntries(form);
-     try{const r=notPlannedAction(store,user,body,hourlyFeed(),now);
-       const said=r.placed?`${body.job} added to ${r.placed.day}.`:r.fix?`${body.job}: fix saved — the agent replans within a minute.`:r.ignored?`${body.job} ignored (${r.ignored.why}).`:`${body.job} is back on the list.`;
-       return go('../plan?done='+encodeURIComponent(said));}
-     catch(e){if(!(e instanceof Fault))throw e;return go('../plan?error='+encodeURIComponent(e.message));}
-   }
-   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Melbourne'}).format(now);
-   return html(200,renderPlan({list:notPlanned(store,hourlyFeed(),now),days:pressDays(store,today),user,
-     message:(url.searchParams.get('done')??'').slice(0,200),error:(url.searchParams.get('error')??'').slice(0,200)}));
+   need(req.method==='GET'&&sub!=='/login'&&sub!=='/logout','Not found.',404);
+   const viewer=planViewer(store,token,now);
+   if(!viewer)return sub?go('../plan'):html(200,renderLogin());
+   const waiting=notPlanned(store,hourlyFeed(),now);
+   const out=(href)=>` · <form method="post" action="${href}" style="display:inline"><button>Sign out ${viewer.name.replace(/[&<>"']/g,'')}</button></form>`;
+   if(sub==='/week'){const next=url.searchParams.get('next')==='1';
+     return html(200,renderWeek(weekFor(store,{watch:boardWatch(),now,next}),{todayHref:'../plan',otherHref:next?'week':'?next=1',waiting:waiting.counts,
+       nav:` · <a href="not-planned">Not planned (${waiting.counts.needs})</a>${out('logout')}`}));}
+   if(sub==='/not-planned')return html(200,renderNotPlanned({list:waiting,user:viewer,nav:'<a href="../plan">Today</a> · <a href="week">Week</a>'}));
+   return html(200,renderBoard(boardFor(store,{watch:boardWatch(),now}),{weekHref:'plan/week',waiting:waiting.counts,
+     nav:` · <a href="plan/not-planned">Not planned (${waiting.counts.needs})</a>${out('plan/logout')}`}));
  }
  if(path==='/health'&&req.method==='GET')return send(200,{ok:true,version:'0.1.0'});
  if(path==='/'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'text/html','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'"});return res.end('<!doctype html><title>Sunnyland Production</title><style>body{font:20px system-ui;padding:8vw;color:#143b33;background:#f5f4ee}p{max-width:40em}</style><h1>Sunnyland Production</h1><p>The shared service is running. Connect using the iPhone app. Staff sign-in is required for stock, jobs and media.</p><p>Version 0.1 pilot. Stock counts start unknown until physically verified.</p>');}

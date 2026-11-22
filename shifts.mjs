@@ -287,3 +287,49 @@ export function shiftTick(store, {now = new Date(), printing = false} = {}) {
       'The press is printing but nobody is signed in on the press screen.');
   return {ended, alerts};
 }
+
+/// Operators don't need an email: a name (and later a PIN and app sign-in) is enough. Managers sign in through PrintCRM.
+export function addOperator(store, actor, name) {
+  store.manager(actor);
+  const clean = str(name, 'name', 60);
+  need(!store.all('user').some(u => u.enabled && u.name.toLowerCase() === clean.toLowerCase()), 'Someone already has that name.', 409);
+  const user = {id: randomUUIDv4(), email: null, name: clean, role: 'operator', enabled: true, salt: null, password: null, createdBy: actor.id, createdAt: new Date().toISOString()};
+  store.put('user', user);
+  store.audit(actor, 'add_operator', user.id, {name: clean});
+  return store.publicUser(user);
+}
+const randomUUIDv4 = () => globalThis.crypto.randomUUID();
+
+/// The read-only planning page: a PIN alone signs in. `place` is where the tries come from (5 wrong locks it for 15 minutes).
+export function planPinSession(store, place, pin, now = new Date(), hours = 12) {
+  need(typeof pin === 'string' && /^\d{4,6}$/.test(pin), 'Type your 4 to 6 digit PIN.');
+  let user = null;
+  guard(store, 'planpin:' + hash(String(place)), now, () => {
+    for (const p of store.all('pressPin')) {
+      const u = store.get('user', p.id);
+      if (u?.enabled && pinMatches(p, pin)) { user = u; return true; }
+    }
+    return false;
+  });
+  need(user, 'That PIN didn’t match.', 401);
+  // Its own session table: a PIN session can only view the planning page, never use the staff API.
+  planSessions(store);
+  const token = randomBytes(32).toString('hex');
+  store.db.prepare('INSERT INTO plan_sessions VALUES (?,?,?)').run(hash(token), user.id, +now + hours * 3600000);
+  store.audit(user, 'plan_view_sign_in', 'plan', {});
+  return {token, user: store.publicUser(user)};
+}
+const planSessions = store => store.db.exec('CREATE TABLE IF NOT EXISTS plan_sessions(token TEXT PRIMARY KEY, user TEXT, expires INTEGER)');
+export function planViewer(store, token, now = new Date()) {
+  if (typeof token !== 'string' || !/^[0-9a-f]{64}$/.test(token)) return null;
+  planSessions(store);
+  const s = store.db.prepare('SELECT * FROM plan_sessions WHERE token=?').get(hash(token));
+  if (!s || s.expires <= +now) return null;
+  const u = store.get('user', s.user);
+  return u?.enabled ? store.publicUser(u) : null;
+}
+export function endPlanSession(store, token) {
+  if (typeof token !== 'string') return;
+  planSessions(store);
+  store.db.prepare('DELETE FROM plan_sessions WHERE token=?').run(hash(token));
+}

@@ -1,5 +1,6 @@
 // Shift hours and press PINs from the server (run on PrintCRM as the service user):
 //   node staff-shifts.mjs list
+//   node staff-shifts.mjs add Sadhir                            (an operator; no email needed)
 //   node staff-shifts.mjs hours Sadhir mon-fri 07:00-15:00 [--printiq "printIQ user name"]   (other days keep their hours)
 //   node staff-shifts.mjs hours Sadhir sat none                (stops a day)
 //   node staff-shifts.mjs day Jacob 2026-11-27 12:00-17:00     (one day's change)
@@ -9,7 +10,7 @@
 import {join} from 'node:path';
 import {createInterface} from 'node:readline';
 import {Store} from './core.mjs';
-import {setDay, setHours, setPin, shiftOverview} from './shifts.mjs';
+import {addOperator, setDay, setHours, setPin, shiftOverview} from './shifts.mjs';
 
 const server = {id: 'server', name: 'PrintCRM server', role: 'manager'};
 const order = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -46,6 +47,9 @@ async function main(args) {
       for (const c of o.changes) console.log(`  change ${c.day}: ${store.get('user', c.user)?.name ?? c.user} ${c.off ? 'off' : `${c.start / 60}h-${c.end / 60}h`}`);
       console.log(o.operator ? `At the press now: ${o.operator.name} until ${new Date(o.operator.until).toLocaleTimeString('en-AU', {timeZone: 'Australia/Melbourne'})}` : 'Nobody signed in at the press.');
       console.log('Staff accounts: ' + store.all('user').filter(u => u.enabled).map(u => `${u.name} (${u.role})`).join(', '));
+    } else if (action === 'add') {
+      const u = addOperator(store, server, [who, ...rest].join(' '));
+      console.log(`Added ${u.name} (operator). Next: node staff-shifts.mjs pin ${u.name}`);
     } else if (action === 'hours') {
       const [daysText, span, flag, iq] = rest;
       const week = Object.fromEntries(parseDays(daysText).map(d => [d, span === 'none' ? null : span]));
@@ -61,7 +65,7 @@ async function main(args) {
       const r = setPin(store, server, who, pin);
       console.log(`PIN set for ${r.name}.`);
     } else {
-      console.error('Usage: node staff-shifts.mjs list | hours <name> mon-fri 07:00-15:00 [--printiq NAME] | day|off|clear <name> <YYYY-MM-DD> [hh:mm-hh:mm] | pin <name>');
+      console.error('Usage: node staff-shifts.mjs list | add <name> | hours <name> mon-fri 07:00-15:00 [--printiq NAME] | day|off|clear <name> <YYYY-MM-DD> [hh:mm-hh:mm] | pin <name>');
       process.exitCode = 1;
     }
   } catch (error) { console.error(error.message); process.exitCode = 1; } finally { store.close(); }

@@ -102,3 +102,17 @@ test('boardFor reads the stored plan and printed records', t => {
   s.put('indigoPrinted', {id: 'J100', job: 'J100', state: 'part', printed: 200, needed: 850});
   assert.equal(boardFor(s, {watch: watch(), now}).next[0].status.label, 'Part printed');
 });
+
+test('today rolls forward: missed runs start from now, printing runs from when sent, printed runs take no time', () => {
+  const at = new Date('2026-11-22T22:14:00Z'); // 09:14 at the plant
+  const w = watch({generatedAt: at.toISOString(), queue: {J200: {status: 'Running', last: new Date(+at - 20 * 60000).toISOString()}}});
+  const printed = new Map([['J300', {job: 'J300', state: 'ready', printed: 500, needed: 500, done: {at: at.toISOString()}}]]);
+  const data = boardData({runs: [run('J100', {earliestStart: 465}), run('J200', {minutes: 60}), run('J300'), run('J400', {fixedStart: 480}),
+    run('J500', {minutes: 400})], watch: w, printed, day, now: at});
+  const start = Object.fromEntries([...data.current, ...data.next].map(r => [r.job, r.start]));
+  assert.equal(start.J200, 9 * 60 - 6); // sent 08:54
+  assert.ok(start.J100 >= 9 * 60 + 54 && start.J400 >= 9 * 60 + 54, 'missed runs start after the printing job ends');
+  assert.equal(data.done.map(r => r.job).join(), 'J300');
+  const j500 = data.next.find(r => r.job === 'J500');
+  assert.equal(j500.start, null); assert.match(j500.status.detail, /Won’t fit today/);
+});

@@ -219,3 +219,20 @@ test('a job that cannot make its due date is booked on the earliest day, flagged
  planHourly(t2,feedOf([feedJob('J000011',{due:'2026-11-23',rep:null})]),now);
  sent=mails(t2);assert.equal(sent.length,1);assert.equal(sent[0].to,'boss@sunnyland.test');assert.match(sent[0].text,/No rep email/);
 });
+
+test('a run whose time has passed is replanned unless it is really on the press; a new watch triggers a replan', t => {
+ const s=setup(t);
+ const f=feedOf([feedJob('J000020',{due:'2026-11-27'}),feedJob('J000021',{due:'2026-11-27'})]);
+ planHourly(s,f,now);
+ assert.equal(s.get('printPlanRun','run-J000020').day,monday);
+ const later=new Date(+now+2*3600000); // 09:00
+ const w={generatedAt:later.toISOString(),queue:{J000021:{status:'Queued',last:later.toISOString()}}};
+ planHourly(s,f,later,{watch:w});
+ const a=s.get('printPlanRun','run-J000020'),b=s.get('printPlanRun','run-J000021');
+ assert.equal(a.earliestStart,9*60,'replanned from now');
+ assert.equal(b.earliestStart,7*60+45,'on the press: left alone');
+ assert.equal(hourlySummary(s,later).watchAt,w.generatedAt);
+ const rev=a.revision;
+ planHourly(s,f,new Date(+later+60000),{watch:w});
+ assert.equal(s.get('printPlanRun','run-J000020').revision,rev,'same feed and same watch: nothing replanned');
+});

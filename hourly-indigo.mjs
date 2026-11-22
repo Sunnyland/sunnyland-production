@@ -4,6 +4,7 @@ import {openSync, closeSync, fstatSync, readFileSync, constants} from 'node:fs';
 import {addWorkdays, chooseLateDay, choosePrintDay, earliestPressStart, finishDay, plantMinute, sequencePressDay} from './print-planning.mjs';
 import {queueProductionAlerts} from './indigo-watch.mjs';
 import {jobIgnored, runFix} from './not-planned.mjs';
+import {queueState} from './board.mjs';
 import {maintenanceRows, openDays} from './press-plan.mjs';
 import {Fault} from './core.mjs';
 import {byPriority,plannerSettings,withFinishingPlan} from './indigo-sequence.mjs';
@@ -29,7 +30,7 @@ export function hourlySummary(store,clock=new Date()){
   const stale=clock.getTime()-Date.parse(row.asOf)>2*3600000;
   return {...row,state:stale?'Hourly source overdue':row.state};
 }
-export function planHourly(store,feed,now=new Date()){
+export function planHourly(store,feed,now=new Date(),{watch=null}={}){
   if(!feed || now-Date.parse(feed.asOf)>2*3600000 || Date.parse(feed.generatedAt)>now.getTime()+60000)return;
   store.db.exec('BEGIN IMMEDIATE');
   try{
@@ -37,7 +38,9 @@ export function planHourly(store,feed,now=new Date()){
     const enabled=plannerConfig?.enabled===true;
     const settings=plannerSettings(plannerConfig);
     const last=store.get(marker,'latest');
-    if(last && (last.generatedAt>feed.generatedAt || (last.generatedAt===feed.generatedAt && (last.enabled || !enabled)))){
+    // Replan when there's a new hourly feed, and also each time the 10-minute press watch updates.
+    const watchAt=typeof watch?.generatedAt==='string'?watch.generatedAt:'';
+    if(last && (last.generatedAt>feed.generatedAt || (last.generatedAt===feed.generatedAt && (last.enabled || !enabled) && !(watchAt && watchAt>(last.watchAt??''))))){
       store.db.exec('COMMIT');return;
     }
     if(feed.completeStatusIds?.length)store.put('jobStatusCatalogue',{id:'current',completeIds:feed.completeStatusIds});
@@ -55,11 +58,15 @@ export function planHourly(store,feed,now=new Date()){
     const historyJobs=new Set(feed.history.map(r=>r.job).filter(Boolean));
     const closed=new Set(feed.jobs.filter(j=>j.state==='complete').map(j=>j.job));
     const reviewed=new Map(feed.jobs.map(j=>[j.job,j]));
-    const todays=sequencePressDay(bookings.filter(b=>!b.removed && b.day===day && b.press===press));
-    const started=new Set(todays.filter(r=>r.start!==null && r.start<=minute).map(r=>r.id));
+    // Started means really started: printing or sent to the Indigo (last 18 hours), or sheets already printed.
+    // A start time that has passed doesn't count, so a run that missed its slot is replanned from now.
+    const pressed=new Set(Object.entries(watch?.queue??{}).filter(([,q])=>['printing','queued'].includes(queueState(q)) &&
+      now-Date.parse(q.last)<18*3600000).map(([job])=>jobKey(job)));
+    const printedJobs=new Set(store.all('indigoPrinted').filter(r=>r.done || r.printed>0).map(r=>jobKey(r.job)));
+    const started=new Set(bookings.filter(b=>pressed.has(jobKey(b.job)) || printedJobs.has(jobKey(b.job))).map(b=>b.id));
     for(const b of bookings){
       const key=jobKey(b.job),job=reviewed.get(key), same=localOps.some(op=>jobKey(op.job)===key && String(op.printiqOperationKey)===b.operationKey && ['running','paused','completed'].includes(op.state));
-      const unstarted=b.day>day || (b.day===day && !started.has(b.id));
+      const unstarted=b.day>day || !started.has(b.id);
       if(b.hourly && !b.managerOverride && !b.removed && unstarted && !same && enabled &&
           (closed.has(key) || (job && !feed.approvalError && !feed.directoryError && !['Accepted routing unavailable','Exact printIQ job unavailable'].includes(job.state)) ||
             (!job && !feed.directoryError && !feed.approvalError)))future.set(b.id,b);
@@ -134,7 +141,7 @@ export function planHourly(store,feed,now=new Date()){
     for(const [id,old] of future)changed.set(id,{...old,removed:true,revision:old.revision+1});
     if(enabled)lateEmails(store,lateAlerts,plannerConfig??{});
     for(const run of changed.values()){store.put(kind,run);store.audit(actor,run.removed?'withdraw_auto_indigo':'plan_auto_indigo',run.id,{job:run.job,day:run.day});}
-    const summary={id:'latest',state:[feed.approvalError,feed.directoryError].filter(Boolean).join(' ') || 'Sources checked',enabled,asOf:feed.asOf,generatedAt:feed.generatedAt,
+    const summary={id:'latest',watchAt,state:[feed.approvalError,feed.directoryError].filter(Boolean).join(' ') || 'Sources checked',enabled,asOf:feed.asOf,generatedAt:feed.generatedAt,
       entries:feed.history.length,historyJobs:historyJobs.size,completed:[...historyJobs].filter(j=>closed.has(j)).length,
       history:feed.history.map(h=>({...h,id:h.entry,mis:reviewed.get(h.job)?.state==='complete'?'Complete in printIQ':reviewed.get(h.job)?.state==='cancelled'?'Cancelled':'Completion unverified'})),
       bookings:published,review};

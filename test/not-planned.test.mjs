@@ -8,6 +8,7 @@ import {planHourly} from '../hourly-indigo.mjs';
 import {notPlanned, notPlannedAction} from '../not-planned.mjs';
 import {createBoardLink} from '../board.mjs';
 import {createServer} from '../server.mjs';
+import {addOperator, setPin} from '../shifts.mjs';
 
 const now = new Date('2026-11-22T20:00:00Z'); // Monday 23 November, 07:00 at the plant
 const later = n => new Date(+now + n * 60000);
@@ -67,35 +68,57 @@ test('place: a manager puts a job on a day by hand and the agent leaves it there
   assert.throws(() => notPlannedAction(s, manager, {action: 'place', job: 'J000004', day: '2026-11-20', minutes: '35'}, feed, now), /later day/);
 });
 
-test('plan page: managers sign in, see the list and act; operators are turned away; the board shows the count', async t => {
-  const {s, feed} = setup(t);
+test('planning page: a PIN signs in to a read-only view; the session cannot use the staff API', async t => {
+  const {s, manager} = setup(t);
+  const sadhir = addOperator(s, manager, 'Sadhir');
+  setPin(s, manager, 'Sadhir', '4826');
+  assert.equal(sadhir.email, null);
   const key = createBoardLink(s, {label: 'Indigo press'});
   const dir = mkdtempSync(join(tmpdir(), 'plan-'));
+  const feed = feedAt([job('J000002', {}, {minutes: null, estimateIssue: 'Check Indigo front and reverse print modes'}), job('J000004', {state: 'Exact printIQ job unavailable', runs: []})]);
   const server = createServer(s, {mediaDir: dir, allowedPeers: null, boardWatch: () => null, hourlyFeed: () => feed, clock: () => later(5)});
   await new Promise(r => server.listen(0, '127.0.0.1', r)); t.after(() => { server.close(); rmSync(dir, {recursive: true, force: true}); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const post = (path, body, cookie = '', origin = 'https://printcrm.sunnyland.com.au') => fetch(base + path, {method: 'POST', redirect: 'manual',
     body: new URLSearchParams(body), headers: {origin, ...(cookie ? {cookie} : {})}});
-  assert.match(await (await fetch(base + '/plan')).text(), /Managers sign in/);
-  let r = await post('/plan/login', {email: 'op@x.test', password: 'a-long-test-password'});
-  assert.equal(r.status, 403);
-  r = await post('/plan/login', {email: 'paul@x.test', password: 'wrong-password-here'});
-  assert.equal(r.status, 401);
-  r = await post('/plan/login', {email: 'paul@x.test', password: 'a-long-test-password'});
+  assert.match(await (await fetch(base + '/plan')).text(), /Sign in with your PIN/);
+  assert.equal((await fetch(base + '/plan/week', {redirect: 'manual'})).status, 303);
+  let r = await post('/plan/login', {pin: '1357'});
+  assert.equal(r.status, 401); assert.match(await r.text(), /didn’t match/);
+  r = await post('/plan/login', {pin: '4826'});
   assert.equal(r.status, 303); assert.equal(r.headers.get('location'), '../plan');
-  const cookie = r.headers.get('set-cookie').split(';')[0];
-  assert.match(r.headers.get('set-cookie'), /HttpOnly; SameSite=Strict/);
+  assert.match(r.headers.get('set-cookie'), /HttpOnly; SameSite=Strict/); assert.doesNotMatch(r.headers.get('set-cookie'), /Path=/);
+  const cookie = r.headers.get('set-cookie').split(';')[0], token = cookie.split('=')[1];
   let page = await (await fetch(base + '/plan', {headers: {cookie}})).text();
-  assert.match(page, /Needs a manager <small>2<\/small>/); assert.match(page, /J000002/); assert.match(page, /Waiting on artwork approval \(1\)/);
-  assert.equal((await post('/plan/action', {action: 'ignore', job: 'J000004', why: 'notNeeded'}, cookie, 'https://evil.example')).status, 403);
-  r = await post('/plan/action', {action: 'ignore', job: 'J000004', why: 'notNeeded'}, cookie);
-  assert.equal(r.status, 303); assert.match(decodeURIComponent(r.headers.get('location')), /J000004 ignored \(Not needed\)/);
-  r = await post('/plan/action', {action: 'fix', job: 'J000002', id: 'run-J000002', minutes: 'abc'}, cookie);
-  assert.match(decodeURIComponent(r.headers.get('location')), /error=Give the run time/);
-  page = await (await fetch(base + '/plan', {headers: {cookie}})).text();
-  assert.match(page, /Needs a manager <small>1<\/small>/);
+  assert.match(page, /Indigo · /); assert.match(page, /href="plan\/week"/); assert.match(page, /Not planned \(2\)/); assert.match(page, /Sign out Sadhir/);
+  page = await (await fetch(base + '/plan/not-planned', {headers: {cookie}})).text();
+  assert.match(page, /J000002/); assert.match(page, /print mode/); assert.doesNotMatch(page, /<form method="post" action="plan\/action"|name="action"/);
+  page = await (await fetch(base + '/plan/week', {headers: {cookie}})).text();
+  assert.match(page, /Indigo week/);
+  assert.equal((await post('/plan/action', {action: 'ignore', job: 'J000004', why: 'notNeeded'}, cookie)).status, 404);
+  assert.equal((await fetch(base + '/api/state', {headers: {authorization: 'Bearer ' + token}})).status, 401, 'a PIN session is not a staff session');
+  // Managers still change the plan through the API (PrintCRM will call it).
+  const {token: mt} = s.login('paul@x.test', 'a-long-test-password');
+  r = await fetch(base + '/api/action?notPlanned=1', {method: 'POST', headers: {authorization: 'Bearer ' + mt, 'content-type': 'application/json'},
+    body: JSON.stringify({action: 'ignore', job: 'J000004', why: 'notNeeded'})});
+  assert.equal(r.status, 200);
   const board = await (await fetch(`${base}/board/${key}`)).text();
-  assert.match(board, /<b>1<\/b> job not planned — a manager is checking/); assert.match(board, /<b>1<\/b> waiting on artwork approval/);
+  assert.match(board, /<b>1<\/b> job not planned — a manager is checking/);
   r = await post('/plan/logout', {}, cookie);
-  assert.match(await (await fetch(base + '/plan', {headers: {cookie}})).text(), /Managers sign in/);
+  assert.match(await (await fetch(base + '/plan', {headers: {cookie}})).text(), /Sign in with your PIN/);
+});
+
+test('"Origin: null" form posts work on the planning page and board, and are refused by the staff API', async t => {
+  const {s, manager} = setup(t);
+  addOperator(s, manager, 'Sadhir'); setPin(s, manager, 'Sadhir', '4826');
+  const dir = mkdtempSync(join(tmpdir(), 'plan-'));
+  const server = createServer(s, {mediaDir: dir, allowedPeers: null, boardWatch: () => null, hourlyFeed: () => null, clock: () => later(5)});
+  await new Promise(r => server.listen(0, '127.0.0.1', r)); t.after(() => { server.close(); rmSync(dir, {recursive: true, force: true}); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  let r = await fetch(base + '/plan/login', {method: 'POST', redirect: 'manual', body: new URLSearchParams({pin: '4826'}), headers: {origin: 'null'}});
+  assert.equal(r.status, 303);
+  r = await fetch(base + '/api/login', {method: 'POST', body: '{}', headers: {origin: 'null', 'content-type': 'application/json'}});
+  assert.equal(r.status, 403);
+  r = await fetch(base + '/api/login', {method: 'POST', body: '{}', headers: {origin: 'not a url', 'content-type': 'application/json'}});
+  assert.equal(r.status, 403);
 });
