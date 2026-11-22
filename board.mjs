@@ -253,13 +253,13 @@ ${h.shiftLeft !== undefined ? `<span class="${h.toPrint > h.shiftLeft ? 'over' :
 }
 
 /// Today's board; refreshes itself every minute. No scripts, so it suits a kiosk browser.
-export function renderBoard(data, {weekHref = 'week', shift = null, key = ''} = {}) {
+export function renderBoard(data, {weekHref = 'week', shift = null, key = '', waiting = null} = {}) {
   const updated = new Date(data.now).toLocaleTimeString('en-AU', {hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne'});
   const list = (rows, big) => rows.length ? `<ol>${rows.map(r => row(r, data.day, big)).join('')}</ol>` : '';
   const next = [...data.next, ...data.maintenance];
   return page('Indigo board', `<header><h1>Indigo · ${esc(dayLabel(data.day))}</h1><div class="meta">${data.counts.printed} of ${data.counts.planned} printed · updated ${esc(updated)} · <a href="${esc(weekHref)}">Week</a></div></header>
 ${shiftPanel(shift, key)}
-${hoursLine(data.hours)}
+${hoursLine(data.hours)}${waitingLine(waiting)}
 ${data.problems.map(p => `<div class="problem">${esc(p)}</div>`).join('')}
 ${data.current.length ? `<h2>Printing now</h2>${list(data.current, true)}` : ''}
 <h2>Next</h2>${next.length ? list(next) : '<p class="empty">Nothing else on today’s plan.</p>'}
@@ -272,6 +272,12 @@ ${legend}`, !shift ? 60 : !shift.operator ? 15 : shift.warning ? 30 : 60);
 const firstName = name => String(name ?? '').split(/\s+/)[0];
 const ampm = minute => { const h = Math.floor(minute / 60), m = minute % 60; return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''}${h < 12 ? 'am' : 'pm'}`; };
 const untilLabel = iso => new Date(iso).toLocaleTimeString('en-AU', {hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne'}).replace(' ', '').toLowerCase();
+
+/// How many Indigo jobs aren't on the plan (managers sort them out on the plan page).
+function waitingLine(w) {
+  if (!w || !(w.needs || w.artwork)) return '';
+  return `<div class="hours">${w.needs ? `<span class="over"><b>${w.needs}</b> job${w.needs === 1 ? '' : 's'} not planned — a manager is checking</span>` : ''}${w.artwork ? `<span><b>${w.artwork}</b> waiting on artwork approval</span>` : ''}</div>`;
+}
 
 /// Who is at the press; while nobody is, the sign-in code, its QR code and the PIN button.
 function shiftPanel(shift, key) {
@@ -300,7 +306,7 @@ ${['1', '2', '3', '4', '5', '6', '7', '8', '9', 'back', '0', 'enter'].map(button
 }
 
 /// Monday-Saturday week page.
-export function renderWeek(data, {todayHref = '.', otherHref = '?next=1'} = {}) {
+export function renderWeek(data, {todayHref = '.', otherHref = '?next=1', waiting = null} = {}) {
   const card = r => `<div class="card ${r.status.key}${r.status.confirm ? ' confirm' : ''}"><div class="job">${r.maintenance ? 'Maintenance' : esc(r.job)}${tags(r.status)}</div>
 <div class="facts">${esc(r.maintenance ? `${r.name} · ${r.anyTime ? hm(r.minutes) + ' any time' : clock(r.start) + ', ' + hm(r.minutes)}` : [r.name, r.stock].filter(Boolean).join(' · '))}</div>
 <div class="facts">${esc(r.status.label)}${r.maintenance ? '' : ' · ' + hm(r.minutes)}</div></div>`;
@@ -310,7 +316,7 @@ ${d.plan.map(card).join('') || '<div class="facts">Nothing booked</div>'}` : '<d
   const first = data.days[0].day, last = data.days[5].day;
   return page('Indigo week', `<header><h1>Indigo week · ${esc(shortDay(first))} – ${esc(shortDay(last))}</h1>
 <div class="meta"><a href="${esc(todayHref)}">Today</a> · <a href="${esc(otherHref)}">${data.next ? 'This week' : 'Next week'}</a></div></header>
-${data.problems.map(p => `<div class="problem">${esc(p)}</div>`).join('')}
+${waitingLine(waiting)}${data.problems.map(p => `<div class="problem">${esc(p)}</div>`).join('')}
 <div class="week">${data.days.map(col).join('')}</div>${legend}`);
 }
 

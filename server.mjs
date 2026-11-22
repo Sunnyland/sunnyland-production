@@ -2,6 +2,9 @@ import {hiddenJobs,observeDirectory,directoryCutoff} from './job-visibility.mjs'
 import {indigoPlanner} from './indigo-agent.mjs';
 import {readWatch} from './indigo-watch.mjs';
 import {boardFor,boardLinkValid,pressPrinting,renderBoard,renderPin,renderWeek,weekFor} from './board.mjs';
+import {notPlanned,notPlannedAction} from './not-planned.mjs';
+import {pressDays,readCookie,renderLogin,renderPlan,sessionCookie} from './plan-page.mjs';
+import {readHourlyFeed} from './hourly-indigo.mjs';
 import {boardCode,shiftAction,shiftOverview,shiftState,shiftTick,signInWithPin,signOut} from './shifts.mjs';
 import {planBookings,pressPlanAction} from './press-plan.mjs';
 import {checkFinish,operationEvidence,readRouting,requirementsPath} from './production-finishes.mjs';
@@ -24,14 +27,15 @@ import {randomUUID,createHash} from 'node:crypto';
 import {Store,Fault,need,barcode,stockBarcodeValue} from './core.mjs';
 import {parseAllowedPeers,peerIsAllowed} from './network.mjs';
 const root=fileURLToPath(new URL('.',import.meta.url));
-export function createServer(store,{mediaDir=join(root,'data','media'),allowedPeers=parseAllowedPeers(process.env.SUNNYLAND_ALLOWED_PEERS),iq=createJobsReader(),reviews=clientReviewSettings(),push=appleProvider(),pressStatusFile=process.env.SUNNYLAND_PRESS_STATUS_FILE,requirementsFile=requirementsPath,runIndigoAgent=false,boardWatch=readWatch,clock=()=>new Date()}={}){
+export function createServer(store,{mediaDir=join(root,'data','media'),allowedPeers=parseAllowedPeers(process.env.SUNNYLAND_ALLOWED_PEERS),iq=createJobsReader(),reviews=clientReviewSettings(),push=appleProvider(),pressStatusFile=process.env.SUNNYLAND_PRESS_STATUS_FILE,requirementsFile=requirementsPath,runIndigoAgent=false,boardWatch=readWatch,hourlyFeed=readHourlyFeed,clock=()=>new Date(),publicHost=process.env.SUNNYLAND_PUBLIC_HOST||'printcrm.sunnyland.com.au'}={}){
  const press = pressStatusHook(store,{statusFile:pressStatusFile});
  const routing=()=>readRouting(requirementsFile);
  const planner=indigoPlanner(store,iq,{routing});
  const jobsConfigured = () => iq.jobsConfigured ?? Boolean(iq.token);
  mkdirSync(mediaDir,{recursive:true});
  const server=http.createServer(async(req,res)=>{const send=(code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
- try{need(peerIsAllowed(req.socket.remoteAddress,allowedPeers),'Connection not permitted.',403);const url=new URL(req.url,'http://localhost'),path=url.pathname;need(!req.headers.origin||path.startsWith('/board/')||new URL(req.headers.origin).host===req.headers.host,'Cross-origin requests are not allowed.',403);
+ try{need(peerIsAllowed(req.socket.remoteAddress,allowedPeers),'Connection not permitted.',403);const url=new URL(req.url,'http://localhost'),path=url.pathname;const originHost=req.headers.origin?new URL(req.headers.origin).host:null;
+ need(!originHost||path.startsWith('/board/')||originHost===req.headers.host||(path.startsWith('/plan')&&[req.headers['x-forwarded-host'],publicHost].includes(originHost)),'Cross-origin requests are not allowed.',403);
  if(path.startsWith('/sample-review/')) return await publicReview({req,res,url,store,mediaDir,settings:reviews});
  // Production board for screens: private link, no staff account. Refreshes itself. The link is the secret, so the
  // board's own forms (PIN pad, sign out) skip the same-origin check; they only change who is at the press.
@@ -56,11 +60,40 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
    need(req.method==='GET'&&sub!=='/sign-out','Not found.',404);
    if(sub==='/pin')return html(200,renderPin({key}));
    const next=url.searchParams.get('next')==='1';
-   if(sub==='/week')return html(200,renderWeek(weekFor(store,{watch:boardWatch(),now,next}),{todayHref:'../'+key,otherHref:next?'week':'?next=1'}));
+   if(sub==='/week')return html(200,renderWeek(weekFor(store,{watch:boardWatch(),now,next}),{todayHref:'../'+key,otherHref:next?'week':'?next=1',waiting:notPlanned(store,hourlyFeed(),now).counts}));
    // Sign-in shows once anyone has shift hours (until then the board stays as it was).
    const state=store.all('staffShift').length?shiftState(store,now):null;
    const shift=state&&{...state,code:state.operator?null:boardCode(store,now).code};
-   return html(200,renderBoard(boardFor(store,{watch:boardWatch(),now}),{weekHref:key+'/week',shift,key}));
+   return html(200,renderBoard(boardFor(store,{watch:boardWatch(),now}),{weekHref:key+'/week',shift,key,waiting:notPlanned(store,hourlyFeed(),now).counts}));
+ }
+ // Manager plan page (signed in): the Not planned list with Add to a day, Fix and Ignore.
+ if(path==='/plan'||path.startsWith('/plan/')){
+   const html=(code,body,extra={})=>{res.writeHead(code,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",...extra});res.end(body);};
+   const go=(to,extra={})=>{res.writeHead(303,{Location:to,'Cache-Control':'no-store',...extra});res.end();};
+   const now=clock();let form=new URLSearchParams();
+   if(req.method==='POST'){const parts=[];let size=0;for await(const part of req){size+=part.length;need(size<=8192,'Request is too large.',413);parts.push(part);}form=new URLSearchParams(Buffer.concat(parts).toString('utf8'));}
+   else need(req.method==='GET'&&path==='/plan','Not found.',404);
+   if(path==='/plan/login'){
+     need(req.method==='POST','Not found.',404);
+     try{const {token,user}=store.login(form.get('email')??'',form.get('password')??'');
+       if(user.role!=='manager'){store.logout(token);return html(403,renderLogin('This page is for managers.'));}
+       return go('../plan',{'Set-Cookie':sessionCookie(token,req)});}
+     catch(e){if(!(e instanceof Fault))throw e;return html(e.status||401,renderLogin(e.message));}
+   }
+   const token=readCookie(req);let user=null;
+   try{user=store.auth(token);store.manager(user);}catch(e){if(!(e instanceof Fault))throw e;user=null;}
+   if(path==='/plan/logout'){if(token)store.logout(token);return go('../plan',{'Set-Cookie':sessionCookie('',req,0)});}
+   if(!user)return req.method==='GET'?html(200,renderLogin()):go('../plan');
+   if(path==='/plan/action'){
+     const body=Object.fromEntries(form);
+     try{const r=notPlannedAction(store,user,body,hourlyFeed(),now);
+       const said=r.placed?`${body.job} added to ${r.placed.day}.`:r.fix?`${body.job}: fix saved — the agent replans within a minute.`:r.ignored?`${body.job} ignored (${r.ignored.why}).`:`${body.job} is back on the list.`;
+       return go('../plan?done='+encodeURIComponent(said));}
+     catch(e){if(!(e instanceof Fault))throw e;return go('../plan?error='+encodeURIComponent(e.message));}
+   }
+   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Melbourne'}).format(now);
+   return html(200,renderPlan({list:notPlanned(store,hourlyFeed(),now),days:pressDays(store,today),user,
+     message:(url.searchParams.get('done')??'').slice(0,200),error:(url.searchParams.get('error')??'').slice(0,200)}));
  }
  if(path==='/health'&&req.method==='GET')return send(200,{ok:true,version:'0.1.0'});
  if(path==='/'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'text/html','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'"});return res.end('<!doctype html><title>Sunnyland Production</title><style>body{font:20px system-ui;padding:8vw;color:#143b33;background:#f5f4ee}p{max-width:40em}</style><h1>Sunnyland Production</h1><p>The shared service is running. Connect using the iPhone app. Staff sign-in is required for stock, jobs and media.</p><p>Version 0.1 pilot. Stock counts start unknown until physically verified.</p>');}
@@ -167,6 +200,7 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
    if(url.searchParams.get('balance')==='1' && matches.length===1) result.balance=store.summary(matches[0].id);
    return send(200,result);
  }
+ if(path==='/api/not-planned'){store.manager(actor);need(canReadJobs(actor),'Job access is required.',403);return send(200,notPlanned(store,hourlyFeed(),clock()));}
  if(path==='/api/shifts'){need(productionStaff(actor),'Production access is required.',403);return send(200,shiftOverview(store,clock()));}
  if(path==='/api/outbox'){store.manager(actor);return send(200,store.db.prepare('SELECT id,channel,entity,state,receipt,created FROM outbox ORDER BY created DESC').all());}
  if(path.startsWith('/api/media/')){const m=store.require('media',path.slice('/api/media/'.length));const sampleMedia=productionStaff(actor) && Boolean(store.db.prepare("SELECT 1 FROM records WHERE kind='sample' AND json_extract(doc,'$.media')=? LIMIT 1").get(m.id));const permitted=sampleMedia || (m.kind==='jobVideo' ? canReadJobs(actor) && Boolean(store.get('jobVideo',m.id)) : m.owner===actor.id||actor.role==='manager');need(permitted,'This media is not available to your account.',403);return streamMedia(req,res,m,mediaDir,{'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});}
@@ -185,6 +219,10 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
    const authorize=()=>{const a=store.auth(token);store.manager(a);need(canReadJobs(a),'Job access is required.',403);return a;};
    need(body && typeof body==='object','Invalid planner action.');
    return send(200,await planner.control(authorize(),req.headers['idempotency-key'],body,authorize));
+ }
+ if(path==='/api/action' && url.searchParams.get('notPlanned')==='1'){
+   need(canReadJobs(actor),'Job access is required.',403);need(body && typeof body==='object','Invalid change.');
+   return send(200,notPlannedAction(store,actor,body,hourlyFeed(),clock()));
  }
  if(path==='/api/action' && url.searchParams.get('shifts')==='1'){
    // Shifts and press sign-in: hours, day changes, PINs (managers); sign in with the board's code / sign out (operators).

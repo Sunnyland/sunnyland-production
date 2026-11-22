@@ -3,6 +3,7 @@ import {printIQJobKey} from './job-tickets.mjs';
 import {openSync, closeSync, fstatSync, readFileSync, constants} from 'node:fs';
 import {addWorkdays, chooseLateDay, choosePrintDay, earliestPressStart, finishDay, plantMinute, sequencePressDay} from './print-planning.mjs';
 import {queueProductionAlerts} from './indigo-watch.mjs';
+import {jobIgnored, runFix} from './not-planned.mjs';
 import {maintenanceRows, openDays} from './press-plan.mjs';
 import {Fault} from './core.mjs';
 import {byPriority,plannerSettings,withFinishingPlan} from './indigo-sequence.mjs';
@@ -69,7 +70,13 @@ export function planHourly(store,feed,now=new Date()){
     const pencilBy=addWorkdays(day,5),awaiting='Awaiting current artwork approval';
     const pencil=job=>job.state===awaiting && Array.isArray(job.runs) && job.runs.length && validDue(job.due) && finishDay(job.due)>=day && finishDay(job.due)<=pencilBy;
     const jobsById=new Map();
-    for(const job of feed.jobs){
+    for(const feedJob of feed.jobs){
+      if(jobIgnored(store,feedJob.job))continue;
+      // A manager's fixes (run time, stock, due date) stand in for printIQ's values.
+      const fixes=(feedJob.runs??[]).map(r=>runFix(store,r.id)).filter(Boolean);
+      const due=fixes.find(f=>f.due)?.due;
+      const job=fixes.length?{...feedJob,...(due?{due}:{}),runs:feedJob.runs.map(r=>{const f=runFix(store,r.id);
+        return f?{...r,...(f.minutes?{minutes:f.minutes,estimateIssue:undefined}:{}),...(f.stock?{stock:f.stock}:{}),managerFix:true}:r;})}:feedJob;
       if(job.state!=='open' && !pencil(job)){
         if(!['complete','cancelled','other press'].includes(job.state))review.push({id:job.job,job:job.job,reason:job.state});
         continue;
@@ -79,7 +86,7 @@ export function planHourly(store,feed,now=new Date()){
         const {finishOps:_ops,...run}=withFinishingPlan({id:item.id,job:job.job,name:job.name,printiqId:job.printiqId,press,part:item.part,stock:item.stock,finishes:item.finishes,
           minutes:item.minutes,due:finishDay(job.due),fixedStart:null,operationKey:item.operationKey,agentOperation:item.operation,agentRelease:true,hourly:true,
           finishOps:Array.isArray(item.finishOps)?item.finishOps:undefined,finishingMinutes:item.finishingMinutes,inIndigoQueue:job.inIndigoQueue===true,
-          provisional:job.state!=='open'},settings);
+          provisional:job.state!=='open',...(item.managerFix?{managerFix:true}:{})},settings);
         jobsById.set(item.id,job);
         const locals=localJobs.filter(row=>jobKey(row.id)===job.job);
         let reason='';
