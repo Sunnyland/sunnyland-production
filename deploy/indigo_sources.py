@@ -250,7 +250,7 @@ def project(job,remote,data,approval,risks,cache,now):
         raise ValueError("Exact accepted product changed")
     status=str(p.get("StatusName") or p.get("Status") or "").strip().lower()
     result={"job":job,"printiqId":remote["Id"],"name":remote.get("JobTitle") or job,"due":remote.get("DueDate") or p.get("DueDate"),
-            "approvedAt":approval.get("approvedAt"),"rep":remote.get("rep"),"state":"open","runs":[]}
+            "approvedAt":approval.get("approvedAt"),"rep":remote.get("rep"),"customer":remote.get("customer"),"state":"open","runs":[]}
     if remote.get("CompletedDate") or status in {"complete","completed"}:
         result["state"]="complete";return result
     if status in {"cancelled","canceled"}:result["state"]="cancelled";return result
@@ -363,6 +363,21 @@ def account_managers(read_users,ids):
                 found[u["Id"]]={"name":" ".join(x for x in (u.get("FirstName"),u.get("Surname")) if x) or None,"email":email}
     return found
 
+def customer_names(read,ids):
+    """Client name for each printIQ job Id, for the board: {Id: name}. Best effort: printIQ refusing the field
+    (or any error) stops after that one request and the board shows the job title alone."""
+    found={};ids=sorted({i for i in ids if type(i) is int and i>0})
+    try:
+        for i in range(0,len(ids),JOBS_PER_LOOKUP):
+            group=ids[i:i+JOBS_PER_LOOKUP]
+            data=read({"$filter":" or ".join("Id eq "+str(g) for g in group),"$select":"Id,CustomerName","$top":str(len(group))})
+            for row in data["value"]:
+                name=row.get("CustomerName")
+                if row.get("Id") in group and isinstance(name,str) and name.strip():found[row["Id"]]=name.strip()[:80]
+    except Exception:
+        pass
+    return found
+
 def odata(jobs,read):
     found={}
     jobs=sorted({key for job in jobs if (key:=jobno(job))})
@@ -415,6 +430,9 @@ def collect(now):
     except (SourceHTTPError,OSError,ValueError,KeyError):reps={}
     for r in mis.values():
         if r and r.get("AccountManagerId") in reps:r["rep"]=reps[r["AccountManagerId"]]
+    clients=customer_names(read,[r.get("Id") for r in mis.values() if r])
+    for r in mis.values():
+        if r and r.get("Id") in clients:r["customer"]=clients[r["Id"]]
     # Carry every local job that can appear in Samples, on a board, or in a staff picker.
     # These need only a bounded Jobs lookup, never an acceptance fetch for scheduling.
     with sqlite3.connect((STATE.parent/"production.sqlite").as_uri()+"?mode=ro",uri=True) as db:

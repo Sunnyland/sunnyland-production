@@ -197,6 +197,18 @@ class Projection(unittest.TestCase):
         with self.assertRaises(ValueError):run()
 
 class Reps(unittest.TestCase):
+    def test_customer_names_are_best_effort_and_stop_after_one_refusal(self):
+        calls=[]
+        def read(params):
+            calls.append(params);return {"value":[{"Id":5,"CustomerName":" Mildura Rural City Council "},{"Id":6,"CustomerName":""},{"Id":99,"CustomerName":"Not asked"}]}
+        self.assertEqual(m.customer_names(read,[5,6,None,"7",5]),{5:"Mildura Rural City Council"})
+        self.assertEqual(calls[0]["$select"],"Id,CustomerName")
+        refused=[]
+        def bad(params):
+            refused.append(1);raise ValueError("unknown property CustomerName")
+        self.assertEqual(m.customer_names(bad,list(range(1,200))),{})
+        self.assertEqual(len(refused),1)
+
     def test_account_managers_are_read_in_batches_and_only_valid_emails_kept(self):
         calls=[]
         users={"10dd3b94-f864-44b3-9cc6-e2f866651901":{"Id":"10dd3b94-f864-44b3-9cc6-e2f866651901","FirstName":"Paul","Surname":"Cocks","Email":"paul@sunnyland.com.au"},

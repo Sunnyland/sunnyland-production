@@ -63,14 +63,16 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
    need(req.method==='GET'&&sub!=='/sign-out','Not found.',404);
    if(sub==='/pin')return html(200,renderPin({key}));
    const next=url.searchParams.get('next')==='1';
-   if(sub==='/week')return html(200,renderWeek(weekFor(store,{watch:boardWatch(),now,next}),{todayHref:'../'+key,otherHref:next?'week':'?next=1',waiting:notPlanned(store,hourlyFeed(),now).counts}));
+   if(sub==='/week')return html(200,renderWeek(weekFor(store,{watch:boardWatch(),now,next,feed:hourlyFeed()}),{todayHref:'../'+key,otherHref:next?'week':'?next=1',waiting:notPlanned(store,hourlyFeed(),now).counts}));
    // Sign-in shows once anyone has shift hours (until then the board stays as it was).
    const state=store.all('staffShift').length?shiftState(store,now):null;
    const shift=state&&{...state,code:state.operator?null:boardCode(store,now).code};
-   return html(200,renderBoard(boardFor(store,{watch:boardWatch(),now}),{weekHref:key+'/week',shift,key,waiting:notPlanned(store,hourlyFeed(),now).counts}));
+   return html(200,renderBoard(boardFor(store,{watch:boardWatch(),now,feed:hourlyFeed()}),{weekHref:key+'/week',shift,key,waiting:notPlanned(store,hourlyFeed(),now).counts}));
  }
  // Production planning page (read only): PIN sign-in, then Today, Week and Not planned. Managers change the plan in PrintCRM.
  if(path==='/plan'||path.startsWith('/plan/')){
+   // A stray trailing slash or an old /plan/login address goes back to the page itself.
+   if(req.method==='GET'&&(path==='/plan/'||path==='/plan/login'||path==='/plan/logout')){res.writeHead(303,{Location:path==='/plan/'?'../plan':'../plan','Cache-Control':'no-store'});return res.end();}
    const m=/^\/plan(\/week|\/not-planned|\/login|\/logout)?$/.exec(path);need(m,'Not found.',404);
    const sub=m[1]??'',now=clock();
    const html=(code,body,extra={})=>{res.writeHead(code,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",...extra});res.end(body);};
@@ -83,18 +85,18 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
      const pin=new URLSearchParams(Buffer.concat(parts).toString('utf8')).get('pin')??'';
      const place=String(req.headers['x-forwarded-for']??'').split(',')[0].trim()||req.socket.remoteAddress||'unknown';
      try{const {token:t}=planPinSession(store,place,pin,now);return go('../plan',{'Set-Cookie':sessionCookie(t,req)});}
-     catch(e){if(!(e instanceof Fault))throw e;return html(e.status||401,renderLogin(e.message));}
+     catch(e){if(!(e instanceof Fault))throw e;return go('../plan?e='+encodeURIComponent(e.message));}
    }
-   need(req.method==='GET'&&sub!=='/login'&&sub!=='/logout','Not found.',404);
+   need(req.method==='GET','Not found.',404);
    const viewer=planViewer(store,token,now);
-   if(!viewer)return sub?go('../plan'):html(200,renderLogin());
+   if(!viewer)return sub?go('../plan'):html(200,renderLogin((url.searchParams.get('e')??'').slice(0,120)));
    const waiting=notPlanned(store,hourlyFeed(),now);
    const out=(href)=>` · <form method="post" action="${href}" style="display:inline"><button>Sign out ${viewer.name.replace(/[&<>"']/g,'')}</button></form>`;
    if(sub==='/week'){const next=url.searchParams.get('next')==='1';
-     return html(200,renderWeek(weekFor(store,{watch:boardWatch(),now,next}),{todayHref:'../plan',otherHref:next?'week':'?next=1',waiting:waiting.counts,
+     return html(200,renderWeek(weekFor(store,{watch:boardWatch(),now,next,feed:hourlyFeed()}),{todayHref:'../plan',otherHref:next?'week':'?next=1',waiting:waiting.counts,
        nav:` · <a href="not-planned">Not planned (${waiting.counts.needs})</a>${out('logout')}`}));}
    if(sub==='/not-planned')return html(200,renderNotPlanned({list:waiting,user:viewer,nav:'<a href="../plan">Today</a> · <a href="week">Week</a>'}));
-   return html(200,renderBoard(boardFor(store,{watch:boardWatch(),now}),{weekHref:'plan/week',waiting:waiting.counts,
+   return html(200,renderBoard(boardFor(store,{watch:boardWatch(),now,feed:hourlyFeed()}),{weekHref:'plan/week',waiting:waiting.counts,
      nav:` · <a href="plan/not-planned">Not planned (${waiting.counts.needs})</a>${out('plan/logout')}`}));
  }
  if(path==='/health'&&req.method==='GET')return send(200,{ok:true,version:'0.1.0'});

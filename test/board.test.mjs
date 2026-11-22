@@ -116,3 +116,15 @@ test('today rolls forward: missed runs start from now, printing runs from when s
   const j500 = data.next.find(r => r.job === 'J500');
   assert.equal(j500.start, null); assert.match(j500.status.detail, /Won’t fit today/);
 });
+
+test('rows show the client and job title, from the run or the hourly feed (also for jobs sent straight to the press)', () => {
+  const info = new Map([['J100', {name: 'Annual report', customer: 'Mildura Council'}], ['J777', {name: 'Wine list', customer: 'Trentham Estate'}]]);
+  const data = boardData({runs: [run('J100', {name: '', customer: undefined}), run('J200', {customer: 'Sunraysia Daily'})], printed: new Map(), day, now, info,
+    watch: watch({queue: {J777: {status: 'Running', last: now.toISOString()}}})});
+  const rows = Object.fromEntries([...data.current, ...data.next].map(r => [r.job, r]));
+  assert.equal(rows.J100.customer, 'Mildura Council'); assert.equal(rows.J100.name, 'Annual report');
+  assert.equal(rows.J200.customer, 'Sunraysia Daily');
+  assert.equal(rows.J777.customer, 'Trentham Estate'); assert.equal(rows.J777.status.key, 'printing');
+  const html = renderBoard(data);
+  assert.match(html, /J777 <span class="client">Trentham Estate<\/span> <span class="name">Wine list<\/span>/);
+});

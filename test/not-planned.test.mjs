@@ -84,7 +84,9 @@ test('planning page: a PIN signs in to a read-only view; the session cannot use 
   assert.match(await (await fetch(base + '/plan')).text(), /Sign in with your PIN/);
   assert.equal((await fetch(base + '/plan/week', {redirect: 'manual'})).status, 303);
   let r = await post('/plan/login', {pin: '1357'});
-  assert.equal(r.status, 401); assert.match(await r.text(), /didn’t match/);
+  assert.equal(r.status, 303); assert.match(r.headers.get('location'), /^\.\.\/plan\?e=/);
+  assert.match(await (await fetch(base + '/' + r.headers.get('location').slice(3))).text(), /didn’t match/);
+  for (const p of ['/plan/', '/plan/login']) { const x = await fetch(base + p, {redirect: 'manual'}); assert.equal(x.status, 303); assert.equal(x.headers.get('location'), '../plan'); }
   r = await post('/plan/login', {pin: '4826'});
   assert.equal(r.status, 303); assert.equal(r.headers.get('location'), '../plan');
   assert.match(r.headers.get('set-cookie'), /HttpOnly; SameSite=Strict/); assert.doesNotMatch(r.headers.get('set-cookie'), /Path=/);

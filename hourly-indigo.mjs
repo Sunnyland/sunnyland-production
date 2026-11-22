@@ -93,7 +93,7 @@ export function planHourly(store,feed,now=new Date(),{watch=null}={}){
         const {finishOps:_ops,...run}=withFinishingPlan({id:item.id,job:job.job,name:job.name,printiqId:job.printiqId,press,part:item.part,stock:item.stock,finishes:item.finishes,
           minutes:item.minutes,due:finishDay(job.due),fixedStart:null,operationKey:item.operationKey,agentOperation:item.operation,agentRelease:true,hourly:true,
           finishOps:Array.isArray(item.finishOps)?item.finishOps:undefined,finishingMinutes:item.finishingMinutes,inIndigoQueue:job.inIndigoQueue===true,
-          provisional:job.state!=='open',...(item.managerFix?{managerFix:true}:{})},settings);
+          provisional:job.state!=='open',customer:typeof job.customer==='string'&&job.customer?job.customer:null,...(item.managerFix?{managerFix:true}:{})},settings);
         jobsById.set(item.id,job);
         const locals=localJobs.filter(row=>jobKey(row.id)===job.job);
         let reason='';

@@ -108,7 +108,7 @@ function dayPlan({runs, blocks, day, ctx, hidden, now = null}) {
   })).concat(rows.filter(r => r.status.key === 'printed').map(r => ({...r, start: null})))
     : sequencePressDay(rows);
   return placed.map(r => ({id: r.id, job: r.maintenance ? '' : jobKey(r.job),
-    name: r.name ?? '', part: r.part ?? '', stock: r.stock ?? '', finishes: r.finishes ?? '', due: r.due ?? null,
+    name: r.name || ctx.info.get(jobKey(r.job))?.name || '', customer: r.maintenance ? '' : r.customer || ctx.info.get(jobKey(r.job))?.customer || '', part: r.part ?? '', stock: r.stock ?? '', finishes: r.finishes ?? '', due: r.due ?? null,
     start: r.start ?? null, minutes: r.minutes, maintenance: Boolean(r.maintenance), held: Boolean(r.held),
     anyTime: Boolean(r.maintenance && r.fixedStart === null),
     status: live && r.start === null && !r.held && !r.maintenance && r.status.key !== 'printed'
@@ -133,13 +133,13 @@ const settle = (watch, now) => {
     [job, queueState(q) === 'printing' && job !== current ? {...q, status: 'Sent', stale: true} : q]));
 };
 
-function context({watch, printed, links, now = new Date()}) {
+function context({watch, printed, links, now = new Date(), info = new Map()}) {
   const queue = settle(watch, now);
   const rank = {printing: 0, queued: 1, completed: 2, aborted: 3};
   // Entries sent under a wrong job number count for the job a manager linked them to.
   const queueFor = job => [queue[job], ...[...links].filter(([, right]) => right === job).map(([wrong]) => queue[wrong])].filter(Boolean)
     .sort((a, b) => (rank[queueState(a)] ?? 9) - (rank[queueState(b)] ?? 9))[0] ?? null;
-  return {approvals: watch?.approvals ?? {}, queueFor, printed};
+  return {approvals: watch?.approvals ?? {}, queueFor, printed, info};
 }
 
 function problemsOf(watch, now) {
@@ -154,8 +154,8 @@ function problemsOf(watch, now) {
 }
 
 /// Pure: the board for one day.
-export function boardData({runs, blocks = [], watch, printed, links = new Map(), open = new Set(), day, now, hidden = () => false}) {
-  const ctx = context({watch, printed, links, now});
+export function boardData({runs, blocks = [], watch, printed, links = new Map(), open = new Set(), day, now, hidden = () => false, info = new Map()}) {
+  const ctx = context({watch, printed, links, now, info});
   const indigo = runs.filter(r => !r.removed && r.press === boardPress);
   const mine = blocks.filter(b => b.press === boardPress);
   const plan = dayPlan({runs: indigo, blocks: mine, day, ctx, hidden, now});
@@ -165,14 +165,14 @@ export function boardData({runs, blocks = [], watch, printed, links = new Map(),
   const onPlan = new Set(plan.map(r => r.job));
   for (const p of printed.values()) {
     if (p.done && finishDay(p.done.at) === day && !onPlan.has(p.job) && !hidden(p.job))
-      done.push({id: 'printed:' + p.job, job: p.job, name: '', part: p.done.section ?? '', stock: '', finishes: '', due: null, start: null,
+      done.push({id: 'printed:' + p.job, job: p.job, name: info.get(jobKey(p.job))?.name ?? '', customer: info.get(jobKey(p.job))?.customer ?? '', part: p.done.section ?? '', stock: '', finishes: '', due: null, start: null,
         status: {key: 'printed', label: 'Printed', detail: `${sheets(p.printed)} sheets`}});
   }
   for (const [job, q] of Object.entries(settle(watch, now))) {
     const right = links.get(job) ?? job;
     if (onPlan.has(right) || hidden(right) || !['printing', 'queued'].includes(queueState(q)) || now - Date.parse(q.last) > 18 * 3600000) continue;
     onPlan.add(right);
-    active.push({id: 'queue:' + right, job: right, name: '', part: '', stock: '', finishes: '', due: null, start: null,
+    active.push({id: 'queue:' + right, job: right, name: info.get(right)?.name ?? '', customer: info.get(right)?.customer ?? '', part: '', stock: '', finishes: '', due: null, start: null,
       status: {key: queueState(q) === 'printing' ? 'printing' : 'queued', label: queueState(q) === 'printing' ? 'Printing now' : 'On the press',
         detail: job === right ? 'Not on today’s plan' : `Sent to the press as ${job}`}});
   }
@@ -186,8 +186,8 @@ export function boardData({runs, blocks = [], watch, printed, links = new Map(),
 }
 
 /// Pure: Monday to Saturday of the week containing `day` (or the next week).
-export function weekData({runs, blocks = [], watch, printed, links = new Map(), open = new Set(), day, now, hidden = () => false, next = false}) {
-  const ctx = context({watch, printed, links, now});
+export function weekData({runs, blocks = [], watch, printed, links = new Map(), open = new Set(), day, now, hidden = () => false, info = new Map(), next = false}) {
+  const ctx = context({watch, printed, links, now, info});
   const monday = addDays(mondayOf(day), next ? 7 : 0);
   const indigo = runs.filter(r => !r.removed && r.press === boardPress), mine = blocks.filter(b => b.press === boardPress);
   const days = [0, 1, 2, 3, 4, 5].map(n => addDays(monday, n)).map(d => {
@@ -217,7 +217,7 @@ h1{margin:0;font-size:1.5em}header .meta{color:#aab2bd}h2{margin:.8em 1em .3em;f
 .hours b{font-variant-numeric:tabular-nums}.over,.over b{color:#ff8a80}
 ol{list-style:none;margin:0;padding:0 1em}.run{display:grid;grid-template-columns:4.2em 1fr 15em;gap:.8em;align-items:center;margin:.35em 0;padding:.55em .8em;
 border-radius:.45em;background:#1c222a;border-left:.55em solid var(--grey)}
-.run .job{font-weight:700}.run .name{font-weight:400;color:#cfd6de}.run .facts,.run .detail,.run .due{color:#aab2bd;font-size:.85em}.run .label{font-weight:700}
+.run .job{font-weight:700}.run .client{font-weight:700;color:#fff}.run .client::after{content:' ·';color:#8a93a0}.run .name{font-weight:400;color:#cfd6de}.run .facts,.run .detail,.run .due{color:#aab2bd;font-size:.85em}.run .label{font-weight:700}
 .run .when{color:#aab2bd;font-variant-numeric:tabular-nums}.due.late{color:#ff8a80;font-weight:700}
 .tag{display:inline-block;margin-left:.4em;padding:0 .35em;border-radius:.25em;font-size:.7em;font-weight:700;vertical-align:middle}
 .tag.rush{background:#ff3b30;color:#fff}.tag.late{background:#8b1a10;color:#ffd7d0}.tag.manual{background:#3a4350;color:#dfe5ec}
@@ -263,7 +263,7 @@ function row(r, day, big = false) {
   const s = r.status;
   return `<li class="run ${s.key}${s.confirm ? ' confirm' : ''}${big ? ' big' : ''}">
 <div class="when">${esc(clock(r.start))}</div>
-<div class="what"><div class="job">${r.maintenance ? 'Maintenance' : esc(r.job)} <span class="name">${esc(r.name)}</span>${tags(s)}</div><div class="facts">${facts}</div></div>
+<div class="what"><div class="job">${r.maintenance ? 'Maintenance' : esc(r.job)}${r.customer ? ` <span class="client">${esc(r.customer)}</span>` : ''} <span class="name">${esc(r.name)}</span>${tags(s)}</div><div class="facts">${facts}</div></div>
 <div class="state"><div class="label">${esc(s.label)}</div><div class="detail">${esc(s.detail)}</div><div class="due ${r.due && r.due <= day ? 'late' : ''}">${esc(dueLabel(r.due, day))}</div></div></li>`;
 }
 
@@ -329,7 +329,7 @@ ${['1', '2', '3', '4', '5', '6', '7', '8', '9', 'back', '0', 'enter'].map(button
 /// Monday-Saturday week page.
 export function renderWeek(data, {todayHref = '.', otherHref = '?next=1', waiting = null, nav = ''} = {}) {
   const card = r => `<div class="card ${r.status.key}${r.status.confirm ? ' confirm' : ''}"><div class="job">${r.maintenance ? 'Maintenance' : esc(r.job)}${tags(r.status)}</div>
-<div class="facts">${esc(r.maintenance ? `${r.name} · ${r.anyTime ? hm(r.minutes) + ' any time' : clock(r.start) + ', ' + hm(r.minutes)}` : [r.name, r.stock].filter(Boolean).join(' · '))}</div>
+<div class="facts">${esc(r.maintenance ? `${r.name} · ${r.anyTime ? hm(r.minutes) + ' any time' : clock(r.start) + ', ' + hm(r.minutes)}` : [r.customer, r.name, r.stock].filter(Boolean).join(' · '))}</div>
 <div class="facts">${esc(r.status.label)}${r.maintenance ? '' : ' · ' + hm(r.minutes)}</div></div>`;
   const col = d => `<section class="col${d.today ? ' today' : ''}${d.past ? ' past' : ''}${d.open ? '' : ' closed'}"><h3>${esc(shortDay(d.day))}</h3>
 ${d.open ? `<div class="sum">Booked <b>${hm(d.hours.booked)}</b>${d.hours.maintenance ? ` · maint. <b>${hm(d.hours.maintenance)}</b>` : ''} · left <b class="${d.hours.left < 0 ? 'over' : ''}">${hm(d.hours.left)}</b></div>
@@ -341,8 +341,10 @@ ${waitingLine(waiting)}${data.problems.map(p => `<div class="problem">${esc(p)}<
 <div class="week">${data.days.map(col).join('')}</div>${legend}`);
 }
 
-function inputs(store, {watch, now}) {
-  return {runs: store.all('printPlanRun'), blocks: maintenanceRows(store), watch, links: jobLinks(store), open: openDays(store),
+function inputs(store, {watch, now, feed = null}) {
+  // Job titles and client names from the hourly feed, for runs booked earlier and jobs sent straight to the press.
+  const info = new Map((feed?.jobs ?? []).map(j => [jobKey(j.job), {name: j.name ?? '', customer: j.customer ?? ''}]));
+  return {info, runs: store.all('printPlanRun'), blocks: maintenanceRows(store), watch, links: jobLinks(store), open: openDays(store),
     printed: new Map(store.all('indigoPrinted').map(r => [jobKey(r.job), r])), day: finishDay(now.toISOString()), now, hidden: hiddenJobs(store)};
 }
 /// True while the Indigo is printing (fresh watch only).
@@ -350,5 +352,5 @@ export function pressPrinting(watch, now = new Date()) {
   if (!watch || (now - Date.parse(watch.generatedAt)) / 60000 > watchStaleMinutes) return false;
   return printingJob(watch, now) !== null;
 }
-export const boardFor = (store, {watch, now = new Date()}) => boardData(inputs(store, {watch, now}));
-export const weekFor = (store, {watch, now = new Date(), next = false}) => weekData({...inputs(store, {watch, now}), next});
+export const boardFor = (store, {watch, now = new Date(), feed = null}) => boardData(inputs(store, {watch, now, feed}));
+export const weekFor = (store, {watch, now = new Date(), next = false, feed = null}) => weekData({...inputs(store, {watch, now, feed}), next});
