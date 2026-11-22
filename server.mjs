@@ -3,6 +3,7 @@ import {indigoPlanner} from './indigo-agent.mjs';
 import {readWatch} from './indigo-watch.mjs';
 import {boardFor,boardLinkValid,pressPrinting,renderBoard,renderPin,renderWeek,weekFor} from './board.mjs';
 import {notPlanned,notPlannedAction} from './not-planned.mjs';
+import {planSummary,pressDays,printcrmActor,readLinkKey,today as plantToday} from './printcrm-link.mjs';
 import {readCookie,renderLogin,renderNotPlanned,sessionCookie} from './plan-page.mjs';
 import {readHourlyFeed} from './hourly-indigo.mjs';
 import {boardCode,endPlanSession,planPinSession,planViewer,shiftAction,shiftOverview,shiftState,shiftTick,signInWithPin,signOut} from './shifts.mjs';
@@ -27,7 +28,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import {Store,Fault,need,barcode,stockBarcodeValue} from './core.mjs';
 import {parseAllowedPeers,peerIsAllowed} from './network.mjs';
 const root=fileURLToPath(new URL('.',import.meta.url));
-export function createServer(store,{mediaDir=join(root,'data','media'),allowedPeers=parseAllowedPeers(process.env.SUNNYLAND_ALLOWED_PEERS),iq=createJobsReader(),reviews=clientReviewSettings(),push=appleProvider(),pressStatusFile=process.env.SUNNYLAND_PRESS_STATUS_FILE,requirementsFile=requirementsPath,runIndigoAgent=false,boardWatch=readWatch,hourlyFeed=readHourlyFeed,clock=()=>new Date(),publicHost=process.env.SUNNYLAND_PUBLIC_HOST||'printcrm.sunnyland.com.au'}={}){
+export function createServer(store,{mediaDir=join(root,'data','media'),allowedPeers=parseAllowedPeers(process.env.SUNNYLAND_ALLOWED_PEERS),iq=createJobsReader(),reviews=clientReviewSettings(),push=appleProvider(),pressStatusFile=process.env.SUNNYLAND_PRESS_STATUS_FILE,requirementsFile=requirementsPath,runIndigoAgent=false,boardWatch=readWatch,hourlyFeed=readHourlyFeed,clock=()=>new Date(),publicHost=process.env.SUNNYLAND_PUBLIC_HOST||'printcrm.sunnyland.com.au',linkKey=readLinkKey}={}){
  const press = pressStatusHook(store,{statusFile:pressStatusFile});
  const routing=()=>readRouting(requirementsFile);
  const planner=indigoPlanner(store,iq,{routing});
@@ -101,6 +102,17 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
  }
  if(path==='/health'&&req.method==='GET')return send(200,{ok:true,version:'0.1.0'});
  if(path==='/'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'text/html','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'"});return res.end('<!doctype html><title>Sunnyland Production</title><style>body{font:20px system-ui;padding:8vw;color:#143b33;background:#f5f4ee}p{max-width:40em}</style><h1>Sunnyland Production</h1><p>The shared service is running. Connect using the iPhone app. Staff sign-in is required for stock, jobs and media.</p><p>Version 0.1 pilot. Stock counts start unknown until physically verified.</p>');}
+ // PrintCRM (managers signed in there) reads and changes the plan from its server with the private link key.
+ if(path==='/api/printcrm/plan'){
+   const manager=printcrmActor(req,linkKey()),now=clock();
+   if(req.method==='GET')return send(200,{plan:planSummary(boardFor(store,{watch:boardWatch(),now,feed:hourlyFeed()})),
+     notPlanned:notPlanned(store,hourlyFeed(),now),days:pressDays(store,plantToday(now))});
+   need(req.method==='POST','Use GET or POST.',405);
+   const parts=[];let size=0;for await(const part of req){size+=part.length;need(size<=8192,'Request is too large.',413);parts.push(part);}
+   let body;try{body=JSON.parse(Buffer.concat(parts).toString('utf8'));}catch{throw new Fault('Invalid JSON.');}
+   need(body&&typeof body==='object','Invalid change.');
+   return send(200,notPlannedAction(store,manager,body,hourlyFeed(),now));
+ }
  const token=req.headers.authorization?.replace(/^Bearer /,'');let actor=null;if(path!=='/api/login')actor=store.auth(token);
  if(path==='/api/client-reviews') return await staffReviews({req,res,url,store,authorize:()=>store.auth(token),settings:reviews});
  if(req.method==='GET'){
