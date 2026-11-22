@@ -1,7 +1,8 @@
 import {rememberStatus} from './job-visibility.mjs';
 import {printIQJobKey} from './job-tickets.mjs';
 import {openSync, closeSync, fstatSync, readFileSync, constants} from 'node:fs';
-import {choosePrintDay, earliestPressStart, finishDay, plantMinute, sequencePressDay} from './print-planning.mjs';
+import {addWorkdays, chooseLateDay, choosePrintDay, earliestPressStart, finishDay, plantMinute, sequencePressDay} from './print-planning.mjs';
+import {queueProductionAlerts} from './indigo-watch.mjs';
 import {maintenanceRows, openDays} from './press-plan.mjs';
 import {Fault} from './core.mjs';
 import {byPriority,plannerSettings,withFinishingPlan} from './indigo-sequence.mjs';
@@ -64,8 +65,12 @@ export function planHourly(store,feed,now=new Date()){
       else kept.push(b);
     }
     const fixed=kept.filter(b=>!b.removed && !b.held);
+    // Unapproved jobs due in the next five working days are pencilled in after the approved work.
+    const pencilBy=addWorkdays(day,5),awaiting='Awaiting current artwork approval';
+    const pencil=job=>job.state===awaiting && Array.isArray(job.runs) && job.runs.length && validDue(job.due) && finishDay(job.due)>=day && finishDay(job.due)<=pencilBy;
+    const jobsById=new Map();
     for(const job of feed.jobs){
-      if(job.state!=='open'){
+      if(job.state!=='open' && !pencil(job)){
         if(!['complete','cancelled','other press'].includes(job.state))review.push({id:job.job,job:job.job,reason:job.state});
         continue;
       }
@@ -73,7 +78,9 @@ export function planHourly(store,feed,now=new Date()){
         // Finishing time from printIQ sets the latest print day; only plain values are stored on the booking.
         const {finishOps:_ops,...run}=withFinishingPlan({id:item.id,job:job.job,name:job.name,printiqId:job.printiqId,press,part:item.part,stock:item.stock,finishes:item.finishes,
           minutes:item.minutes,due:finishDay(job.due),fixedStart:null,operationKey:item.operationKey,agentOperation:item.operation,agentRelease:true,hourly:true,
-          finishOps:Array.isArray(item.finishOps)?item.finishOps:undefined,finishingMinutes:item.finishingMinutes,inIndigoQueue:job.inIndigoQueue===true},settings);
+          finishOps:Array.isArray(item.finishOps)?item.finishOps:undefined,finishingMinutes:item.finishingMinutes,inIndigoQueue:job.inIndigoQueue===true,
+          provisional:job.state!=='open'},settings);
+        jobsById.set(item.id,job);
         const locals=localJobs.filter(row=>jobKey(row.id)===job.job);
         let reason='';
         if(holds.has(job.job) || locals.some(local=>local.active===false || (local.printiqId && local.printiqId!==run.printiqId)))reason='Check local job status or hold';
@@ -87,17 +94,26 @@ export function planHourly(store,feed,now=new Date()){
         else pending.push(run);
       }
     }
-    pending.sort(byPriority);
-    const published=[];
+    pending.sort((a,b)=>Number(a.provisional)-Number(b.provisional)||byPriority(a,b));
+    const published=[],lateAlerts=[];
     for(const run of pending){
       try{run.day=choosePrintDay(run,fixed,now,open);run.finishingAtRisk=false;}catch(e){
         if(!(e instanceof Fault))throw e;
         // No day leaves the full finishing time: book the earliest day before the due date and flag it.
         let day=null;
         if(run.latestPrintDay && run.latestPrintDay<run.due){try{day=choosePrintDay({...run,latestPrintDay:null},fixed,now,open);}catch(again){if(!(again instanceof Fault))throw again;}}
-        if(!day){review.push({id:run.id,job:run.job,reason:e.message});continue;}
+        // Still nothing: approved work goes on the earliest day with room, flagged late (pencilled-in work waits).
+        if(!day && !run.provisional){try{day=chooseLateDay(run,fixed,now,open);}catch(again){if(!(again instanceof Fault))throw again;}}
+        if(!day){review.push({id:run.id,job:run.job,reason:run.provisional?'Not approved, and no room before it is due':e.message});continue;}
         run.day=day;run.finishingAtRisk=true;
-        review.push({id:run.id,job:run.job,reason:'Booked '+day+', but that leaves less than the '+run.finishingDays+' working day'+(run.finishingDays===1?'':'s')+' of finishing printIQ estimates'});
+        if(day<=run.due)review.push({id:run.id,job:run.job,reason:'Booked '+day+', but that leaves less than the '+run.finishingDays+' working day'+(run.finishingDays===1?'':'s')+' of finishing printIQ estimates'});
+      }
+      // Best-case dispatch: print day, printIQ's finishing days, plus one spare working day.
+      run.bestDispatch=addWorkdays(run.day,(Number.isInteger(run.finishingDays)?run.finishingDays:0)+1);
+      run.late=!run.provisional && run.bestDispatch>run.due;
+      if(run.late){
+        review.push({id:run.id,job:run.job,reason:'Late: printing '+run.day+', best-case dispatch '+run.bestDispatch+' (due '+run.due+')'});
+        lateAlerts.push({run,job:jobsById.get(run.id)});
       }
       run.earliestStart=earliestPressStart(press,run.day,now);
       fixed.push(run);published.push({id:run.id,job:run.job,part:run.part,day:run.day,press});
@@ -109,6 +125,7 @@ export function planHourly(store,feed,now=new Date()){
       future.delete(run.id);
     }
     for(const [id,old] of future)changed.set(id,{...old,removed:true,revision:old.revision+1});
+    if(enabled)lateEmails(store,lateAlerts,plannerConfig??{});
     for(const run of changed.values()){store.put(kind,run);store.audit(actor,run.removed?'withdraw_auto_indigo':'plan_auto_indigo',run.id,{job:run.job,day:run.day});}
     const summary={id:'latest',state:[feed.approvalError,feed.directoryError].filter(Boolean).join(' ') || 'Sources checked',enabled,asOf:feed.asOf,generatedAt:feed.generatedAt,
       entries:feed.history.length,historyJobs:historyJobs.size,completed:[...historyJobs].filter(j=>closed.has(j)).length,
@@ -117,4 +134,28 @@ export function planHourly(store,feed,now=new Date()){
     store.put(marker,summary);
     store.db.exec('COMMIT');
   }catch(e){store.db.exec('ROLLBACK');throw e;}
+}
+
+const validDue=value=>typeof value==='string' && Boolean(finishDay(value));
+const longDay=day=>new Date(day+'T00:00:00Z').toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'});
+
+/// Emails the sales rep (or the managers when printIQ has no rep email) when a job can't make its due date,
+/// with the best-case dispatch date. Once per job, and again only if the date moves later.
+function lateEmails(store,late,config){
+  const alerts=[];
+  for(const {run,job} of late){
+    const prior=store.get('lateDispatch',run.job);
+    if(prior && prior.dispatch>=run.bestDispatch)continue;
+    store.put('lateDispatch',{id:run.job,dispatch:run.bestDispatch,printDay:run.day,due:run.due,at:new Date().toISOString()});
+    const rep=job?.rep?.email && /^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(job.rep.email)?job.rep:null;
+    alerts.push({key:`late-dispatch:${run.job}:${run.bestDispatch}`,audience:rep?'rep':'managers',rep,job:run.job,
+      subject:`${run.job} ${run.name??''}: best-case dispatch ${longDay(run.bestDispatch)} (due ${longDay(run.due)})`.replace(/\s+/g,' '),
+      text:[`${run.job} ${run.name??''} can't be ready by its due date of ${longDay(run.due)}.`,'',
+        `It is booked on the Indigo for ${longDay(run.day)}${run.part?` (${run.part})`:''}.`,
+        `printIQ allows ${run.finishingDays??0} working day${run.finishingDays===1?'':'s'} of finishing after printing, plus one spare day,`,
+        `so the best-case dispatch date is ${longDay(run.bestDispatch)}.`,'',
+        'Please let the customer know, or talk to production about moving other work.',
+        ...(rep?[]:['','(No rep email was found for this job in printIQ, so this went to the production managers.)'])].join('\n')});
+  }
+  if(alerts.length)queueProductionAlerts(store,alerts,config);
 }

@@ -5,7 +5,7 @@ import {printIQJobKey,printIQNumberFilter,samePrintIQJob} from './job-tickets.mj
 export const presses = ['HP Indigo 7900','Ryobi 755','Heidelberg SM52'];
 const kind = 'printPlanRun';
 const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
-import {finishDay,validDay,hiddenJobs,observeDirectory} from './job-visibility.mjs';
+import {finishDay,validDay,hiddenJobs,observeDirectory,isPlantWorkday} from './job-visibility.mjs';
 import {indigoDayOrder,sharesFinishing} from './indigo-sequence.mjs';
 import {maintenanceRows,openDays,planBookings} from './press-plan.mjs';
 export {finishDay} from './job-visibility.mjs';
@@ -158,6 +158,31 @@ export function choosePrintDay(run,bookings,now,open=new Set()) {
   const by=deadline<run.due?'in time for its finishing before the due date':'by the required finish';
   need(candidates.length,atCapacity?'No automatic slot fits '+by+' within the 80% Indigo booking limit.':'No automatic slot fits '+by+' in the next five weekdays. Choose another press or set a date and time.',409);
   return candidates[0].day;
+}
+
+/// When no day meets the due date: the earliest day in the next ten weekdays with room (ignores the due date).
+export function chooseLateDay(run,bookings,now,open=new Set()) {
+  const today=finishDay(now.toISOString());
+  if (run.press===indigo) need(run.minutes<=indigoBookableMinutes,indigoLimitMessage,409);
+  const start=new Date(today+'T00:00:00Z');
+  for(let offset=0,weekdays=0;weekdays<10;offset++){
+    const date=new Date(start.getTime()+offset*86400000), day=date.toISOString().slice(0,10);
+    if(date.getUTCDay()===0 || (date.getUTCDay()===6 && !open.has(day)))continue;
+    weekdays++;
+    const same=bookings.filter(r=>!r.removed && r.press===run.press && r.day===day && r.id!==run.id);
+    const capacity=indigoCapacity(same,day,run.press);
+    if(capacity && capacity.bookedMinutes+run.minutes>capacity.limitMinutes)continue;
+    const placed=sequencePressDay([...same,{...run,day,earliestStart:earliestPressStart(run.press,day,now)}]);
+    if(placed.some(r=>r.start===null && !r.maintenance && !r.held))continue;
+    return day;
+  }
+  need(false,'No room on the Indigo in the next ten weekdays.',409);
+}
+/// `day` plus n plant working days (weekends and public holidays skipped).
+export function addWorkdays(day,n){
+  let d=new Date(day+'T00:00:00Z'),left=n;
+  while(left>0){d=new Date(d.getTime()+86400000);if(isPlantWorkday(d.toISOString().slice(0,10)))left--;}
+  return d.toISOString().slice(0,10);
 }
 
 export async function localJobDates(store,iq) {

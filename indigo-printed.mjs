@@ -15,6 +15,7 @@
 //
 // Mode (in the Indigo agent settings): dryRun (default) records what would be written but writes nothing to printIQ;
 // live writes; off stops the check.
+import {pressOperator} from './shifts.mjs';
 import {openSync, closeSync, fstatSync, readFileSync, constants} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {need} from './core.mjs';
@@ -124,14 +125,17 @@ function noteLines(record, section, actor) {
 
 /// Records the job as printed. Live: queues the printIQ note, then the Printing-operation finish (each once only).
 function markPrinted(store, record, section, {settings, actor = null, now}) {
-  const lines = noteLines(record, section, actor);
-  const done = {at: now.toISOString(), by: actor?.id ?? null, byName: actor?.name ?? 'Indigo agent', mode: settings.mode,
+  // The operator signed in at the press goes on the printIQ finish (their printIQ user name, if set); else the default.
+  const atPress = pressOperator(store, now);
+  const operator = atPress?.printiqUser ?? settings.operator;
+  const lines = [...noteLines(record, section, actor), ...(atPress ? [`Operator at the press: ${atPress.name}`] : [])];
+  const done = {at: now.toISOString(), by: actor?.id ?? null, byName: actor?.name ?? 'Indigo agent', operator: atPress?.name ?? null, mode: settings.mode,
     operationKey: section.operationKey, sectionKey: section.sectionKey, section: sectionLabel(section), note: lines};
   if (settings.mode === 'live') {
     const key = `${record.job}:${section.operationKey}`;
     store.queue('printiq', record.job, {kind: 'indigo_printed', job: record.job, section: section.name ?? undefined, actor: actor?.id, lines}, 'indigo-printed:note:' + key);
     store.queue('printiq_finish', record.job, {kind: 'printing_finish', job: record.job, printiqJobNo: record.printiqJobNo,
-      sectionKey: section.sectionKey, operationKey: Number(section.operationKey), operator: settings.operator, at: now.toISOString()}, 'indigo-printed:finish:' + key);
+      sectionKey: section.sectionKey, operationKey: Number(section.operationKey), operator, at: now.toISOString()}, 'indigo-printed:finish:' + key);
   }
   return done;
 }

@@ -1,7 +1,8 @@
 import {hiddenJobs,observeDirectory,directoryCutoff} from './job-visibility.mjs';
 import {indigoPlanner} from './indigo-agent.mjs';
 import {readWatch} from './indigo-watch.mjs';
-import {boardFor,boardLinkValid,renderBoard,renderWeek,weekFor} from './board.mjs';
+import {boardFor,boardLinkValid,pressPrinting,renderBoard,renderPin,renderWeek,weekFor} from './board.mjs';
+import {boardCode,shiftAction,shiftOverview,shiftState,shiftTick,signInWithPin,signOut} from './shifts.mjs';
 import {planBookings,pressPlanAction} from './press-plan.mjs';
 import {checkFinish,operationEvidence,readRouting,requirementsPath} from './production-finishes.mjs';
 import {indigoCapacity, localJobDates, pressDay, savePrintRun, searchDueJobs} from './print-planning.mjs';
@@ -30,15 +31,35 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
  const jobsConfigured = () => iq.jobsConfigured ?? Boolean(iq.token);
  mkdirSync(mediaDir,{recursive:true});
  const server=http.createServer(async(req,res)=>{const send=(code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
- try{need(peerIsAllowed(req.socket.remoteAddress,allowedPeers),'Connection not permitted.',403);const url=new URL(req.url,'http://localhost'),path=url.pathname;need(!req.headers.origin||new URL(req.headers.origin).host===req.headers.host,'Cross-origin requests are not allowed.',403);
+ try{need(peerIsAllowed(req.socket.remoteAddress,allowedPeers),'Connection not permitted.',403);const url=new URL(req.url,'http://localhost'),path=url.pathname;need(!req.headers.origin||path.startsWith('/board/')||new URL(req.headers.origin).host===req.headers.host,'Cross-origin requests are not allowed.',403);
  if(path.startsWith('/sample-review/')) return await publicReview({req,res,url,store,mediaDir,settings:reviews});
- // Production board for screens: private link, read-only, no sign-in. Refreshes itself every minute.
- if(path.startsWith('/board/')&&req.method==='GET'){
-   const m=/^\/board\/([A-Za-z0-9_-]{32})(\/week)?$/.exec(path);need(m&&boardLinkValid(store,m[1]),'Not found.',404);
-   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'"});
-   const next=url.searchParams.get('next')==='1',key=m[1];
-   return res.end(m[2]?renderWeek(weekFor(store,{watch:boardWatch(),now:clock(),next}),{todayHref:'../'+key,otherHref:next?'week':'?next=1'})
-     :renderBoard(boardFor(store,{watch:boardWatch(),now:clock()}),{weekHref:key+'/week'}));
+ // Production board for screens: private link, no staff account. Refreshes itself. The link is the secret, so the
+ // board's own forms (PIN pad, sign out) skip the same-origin check; they only change who is at the press.
+ if(path.startsWith('/board/')){
+   const m=/^\/board\/([A-Za-z0-9_-]{32})(\/week|\/pin|\/sign-out)?$/.exec(path);need(m&&boardLinkValid(store,m[1]),'Not found.',404);
+   const key=m[1],sub=m[2]??'',now=clock();
+   const html=(code,body)=>{res.writeHead(code,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'self'"});res.end(body);};
+   const back=()=>{res.writeHead(303,{Location:'../'+key,'Cache-Control':'no-store'});res.end();};
+   if(req.method==='POST'){
+     need(sub==='/pin'||sub==='/sign-out','Not found.',404);
+     const parts=[];let size=0;for await(const part of req){size+=part.length;need(size<=2048,'Request is too large.',413);parts.push(part);}
+     const form=new URLSearchParams(Buffer.concat(parts).toString('utf8'));
+     if(sub==='/sign-out'){signOut(store,null,now,'signed out at the press screen');return back();}
+     let digits=(form.get('d')??'').replace(/\D/g,'').slice(0,6);const k=form.get('k')??'';
+     if(/^\d$/.test(k)&&digits.length<6)digits+=k;else if(k==='back')digits=digits.slice(0,-1);
+     else if(k==='enter'){
+       try{signInWithPin(store,key,digits,now);return back();}
+       catch(e){if(!(e instanceof Fault))throw e;return html(e.status===429?429:401,renderPin({key,error:e.message}));}
+     }
+     return html(200,renderPin({key,digits}));
+   }
+   need(req.method==='GET'&&sub!=='/sign-out','Not found.',404);
+   if(sub==='/pin')return html(200,renderPin({key}));
+   const next=url.searchParams.get('next')==='1';
+   if(sub==='/week')return html(200,renderWeek(weekFor(store,{watch:boardWatch(),now,next}),{todayHref:'../'+key,otherHref:next?'week':'?next=1'}));
+   const state=shiftState(store,now);
+   const shift={...state,code:state.operator?null:boardCode(store,now).code};
+   return html(200,renderBoard(boardFor(store,{watch:boardWatch(),now}),{weekHref:key+'/week',shift,key}));
  }
  if(path==='/health'&&req.method==='GET')return send(200,{ok:true,version:'0.1.0'});
  if(path==='/'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'text/html','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'"});return res.end('<!doctype html><title>Sunnyland Production</title><style>body{font:20px system-ui;padding:8vw;color:#143b33;background:#f5f4ee}p{max-width:40em}</style><h1>Sunnyland Production</h1><p>The shared service is running. Connect using the iPhone app. Staff sign-in is required for stock, jobs and media.</p><p>Version 0.1 pilot. Stock counts start unknown until physically verified.</p>');}
@@ -145,6 +166,7 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
    if(url.searchParams.get('balance')==='1' && matches.length===1) result.balance=store.summary(matches[0].id);
    return send(200,result);
  }
+ if(path==='/api/shifts'){need(productionStaff(actor),'Production access is required.',403);return send(200,shiftOverview(store,clock()));}
  if(path==='/api/outbox'){store.manager(actor);return send(200,store.db.prepare('SELECT id,channel,entity,state,receipt,created FROM outbox ORDER BY created DESC').all());}
  if(path.startsWith('/api/media/')){const m=store.require('media',path.slice('/api/media/'.length));const sampleMedia=productionStaff(actor) && Boolean(store.db.prepare("SELECT 1 FROM records WHERE kind='sample' AND json_extract(doc,'$.media')=? LIMIT 1").get(m.id));const permitted=sampleMedia || (m.kind==='jobVideo' ? canReadJobs(actor) && Boolean(store.get('jobVideo',m.id)) : m.owner===actor.id||actor.role==='manager');need(permitted,'This media is not available to your account.',403);return streamMedia(req,res,m,mediaDir,{'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});}
  }
@@ -162,6 +184,11 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
    const authorize=()=>{const a=store.auth(token);store.manager(a);need(canReadJobs(a),'Job access is required.',403);return a;};
    need(body && typeof body==='object','Invalid planner action.');
    return send(200,await planner.control(authorize(),req.headers['idempotency-key'],body,authorize));
+ }
+ if(path==='/api/action' && url.searchParams.get('shifts')==='1'){
+   // Shifts and press sign-in: hours, day changes, PINs (managers); sign in with the board's code / sign out (operators).
+   need(productionStaff(actor),'Production access is required.',403);need(body && typeof body==='object','Invalid shift change.');
+   return send(200,shiftAction(store,actor,body,clock()));
  }
  if(path==='/api/action' && url.searchParams.get('pressPlan')==='1'){
    // Manager changes to the press plan: rush, hold, on the press, maintenance, job-number links, Saturdays.
@@ -218,6 +245,10 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
    let timer;
    server.once('listening',()=>{void planner.tick();timer=setInterval(()=>void planner.tick(),60000);timer.unref();});
    server.once('close',()=>clearInterval(timer));
+   // Shifts: sign out at the end of a shift, and the shift notifications.
+   let shiftTimer;const shifts=()=>{try{shiftTick(store,{now:clock(),printing:pressPrinting(boardWatch(),clock())});}catch(e){console.error('Shift check failed:',e.message);}};
+   server.once('listening',()=>{shifts();shiftTimer=setInterval(shifts,60000);shiftTimer.unref();});
+   server.once('close',()=>clearInterval(shiftTimer));
  }
  return server;
 }

@@ -11,6 +11,7 @@ import {indigoCapacity, plantMinute, sequencePressDay} from './print-planning.mj
 import {printIQJobKey} from './job-tickets.mjs';
 import {finishDay, hiddenJobs} from './job-visibility.mjs';
 import {jobLinks, maintenanceRows, openDays} from './press-plan.mjs';
+import {qrSvg} from './qr.mjs';
 
 export const boardPress = 'HP Indigo 7900';
 const linkKind = 'boardLink';
@@ -57,18 +58,18 @@ const sheets = n => n.toLocaleString('en-AU');
 function statusOf(run, {approvals, queueFor, printed}) {
   if (run.maintenance) return {key: 'maintenance', label: 'Maintenance', detail: run.name ?? ''};
   const job = jobKey(run.job), p = printed.get(job), qs = queueState(queueFor(job)), approval = approvals[job];
-  const base = {confirm: p?.state === 'confirm' && !p.done, rush: Boolean(run.rush),
+  const base = {confirm: p?.state === 'confirm' && !p.done, rush: Boolean(run.rush), late: run.late ? run.bestDispatch ?? true : null,
     manual: Boolean(run.managerOverride || (run.fixedStart !== null && run.fixedStart !== undefined))};
   if (run.held) return {...base, key: 'held', label: 'Held', detail: run.held.reason ?? ''};
   if (p?.done) return {...base, key: 'printed', label: 'Printed', detail: p.printed ? `${sheets(p.printed)} sheets` : ''};
   if (qs === 'printing') return {...base, key: 'printing', label: 'Printing now', detail: p?.printed ? `${sheets(p.printed)}${p.needed ? ' of ' + sheets(p.needed) : ''} sheets so far` : ''};
   if (p?.state === 'part') return {...base, key: 'part', label: 'Part printed', detail: `${sheets(p.printed)} of ${sheets(p.needed)} sheets`};
   if (p?.state === 'confirm') return {...base, key: 'part', label: 'Printed — needs confirming', detail: `${sheets(p.printed)} sheets`};
-  if (qs === 'queued') return {...base, key: 'queued', label: 'On the press', detail: 'In the Indigo queue'};
+  if (qs === 'queued') return {...base, key: 'queued', label: 'On the press', detail: queueFor(job)?.stale ? 'Sent to the press; no finish reported yet' : 'In the Indigo queue'};
   if (qs === 'completed') return {...base, key: 'part', label: 'Printed — counting sheets', detail: 'Checked within 10 minutes'};
   if (run.onPress) return {...base, key: 'queued', label: 'On the press', detail: 'Marked by a manager'};
   if (approval?.approved) return {...base, key: 'approved', label: 'Approved — not on the press', detail: ''};
-  return {...base, key: 'unapproved', label: 'Not approved', detail: ''};
+  return {...base, key: 'unapproved', label: run.provisional ? 'Not approved — pencilled in' : 'Not approved', detail: run.provisional ? 'Firms up when the artwork is approved' : ''};
 }
 
 /// Hours for one day: capacity, booked press time, maintenance and what is left.
@@ -94,8 +95,25 @@ function dayPlan({runs, blocks, day, ctx, hidden}) {
     anyTime: Boolean(r.maintenance && r.fixedStart === null), status: statusOf(r, ctx)}));
 }
 
-function context({watch, printed, links}) {
-  const queue = watch?.queue ?? {};
+/// The job printing now: the newest "Running" entry sent in the last 8 hours. Production Pro sometimes never reports
+/// a final status, so older "Running" entries (and all but the newest) only count as on the press.
+const printingWindowHours = 8;
+export function printingJob(watch, now = new Date()) {
+  let best = null;
+  for (const [job, q] of Object.entries(watch?.queue ?? {})) {
+    if (queueState(q) !== 'printing' || !Number.isFinite(Date.parse(q.last)) || now - Date.parse(q.last) > printingWindowHours * 3600000) continue;
+    if (!best || q.last > best[1].last) best = [job, q];
+  }
+  return best?.[0] ?? null;
+}
+const settle = (watch, now) => {
+  const current = printingJob(watch, now);
+  return Object.fromEntries(Object.entries(watch?.queue ?? {}).map(([job, q]) =>
+    [job, queueState(q) === 'printing' && job !== current ? {...q, status: 'Sent', stale: true} : q]));
+};
+
+function context({watch, printed, links, now = new Date()}) {
+  const queue = settle(watch, now);
   const rank = {printing: 0, queued: 1, completed: 2, aborted: 3};
   // Entries sent under a wrong job number count for the job a manager linked them to.
   const queueFor = job => [queue[job], ...[...links].filter(([, right]) => right === job).map(([wrong]) => queue[wrong])].filter(Boolean)
@@ -116,7 +134,7 @@ function problemsOf(watch, now) {
 
 /// Pure: the board for one day.
 export function boardData({runs, blocks = [], watch, printed, links = new Map(), open = new Set(), day, now, hidden = () => false}) {
-  const ctx = context({watch, printed, links});
+  const ctx = context({watch, printed, links, now});
   const indigo = runs.filter(r => !r.removed && r.press === boardPress);
   const mine = blocks.filter(b => b.press === boardPress);
   const plan = dayPlan({runs: indigo, blocks: mine, day, ctx, hidden});
@@ -129,7 +147,7 @@ export function boardData({runs, blocks = [], watch, printed, links = new Map(),
       done.push({id: 'printed:' + p.job, job: p.job, name: '', part: p.done.section ?? '', stock: '', finishes: '', due: null, start: null,
         status: {key: 'printed', label: 'Printed', detail: `${sheets(p.printed)} sheets`}});
   }
-  for (const [job, q] of Object.entries(watch?.queue ?? {})) {
+  for (const [job, q] of Object.entries(settle(watch, now))) {
     const right = links.get(job) ?? job;
     if (onPlan.has(right) || hidden(right) || !['printing', 'queued'].includes(queueState(q)) || now - Date.parse(q.last) > 18 * 3600000) continue;
     onPlan.add(right);
@@ -148,7 +166,7 @@ export function boardData({runs, blocks = [], watch, printed, links = new Map(),
 
 /// Pure: Monday to Saturday of the week containing `day` (or the next week).
 export function weekData({runs, blocks = [], watch, printed, links = new Map(), open = new Set(), day, now, hidden = () => false, next = false}) {
-  const ctx = context({watch, printed, links});
+  const ctx = context({watch, printed, links, now});
   const monday = addDays(mondayOf(day), next ? 7 : 0);
   const indigo = runs.filter(r => !r.removed && r.press === boardPress), mine = blocks.filter(b => b.press === boardPress);
   const days = [0, 1, 2, 3, 4, 5].map(n => addDays(monday, n)).map(d => {
@@ -166,7 +184,9 @@ const hm = minutes => { const m = Math.abs(minutes), h = Math.floor(m / 60), r =
 const dayLabel = day => new Date(day + 'T00:00:00Z').toLocaleDateString('en-AU', {weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC'});
 const shortDay = day => new Date(day + 'T00:00:00Z').toLocaleDateString('en-AU', {weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC'});
 const dueLabel = (due, day) => !due ? '' : due === day ? 'Due today' : due < day ? 'Overdue' : 'Due ' + shortDay(due);
-const tags = s => (s.rush ? '<span class="tag rush">RUSH</span>' : '') + (s.manual ? '<span class="tag manual">MANUAL</span>' : '');
+const dispatchLabel = day => new Date(day + 'T00:00:00Z').toLocaleDateString('en-AU', {weekday: 'short', day: 'numeric', timeZone: 'UTC'});
+const tags = s => (s.rush ? '<span class="tag rush">RUSH</span>' : '') + (s.late ? `<span class="tag late">LATE${typeof s.late === 'string' ? ' · dispatch ' + esc(dispatchLabel(s.late)) : ''}</span>` : '')
+  + (s.manual ? '<span class="tag manual">MANUAL</span>' : '');
 
 const style = `:root{--grey:#8a8f98;--amber:#f0a020;--blue:#2f6fde;--bright:#00a2ff;--teal:#13a89e;--green:#2e9e4f;--orange:#ff7a00;--maint:#8e7cc3}
 *{box-sizing:border-box}body{margin:0;background:#101317;color:#eef1f4;font:clamp(14px,1.4vw,26px)/1.25 system-ui,-apple-system,Segoe UI,sans-serif}
@@ -179,7 +199,7 @@ border-radius:.45em;background:#1c222a;border-left:.55em solid var(--grey)}
 .run .job{font-weight:700}.run .name{font-weight:400;color:#cfd6de}.run .facts,.run .detail,.run .due{color:#aab2bd;font-size:.85em}.run .label{font-weight:700}
 .run .when{color:#aab2bd;font-variant-numeric:tabular-nums}.due.late{color:#ff8a80;font-weight:700}
 .tag{display:inline-block;margin-left:.4em;padding:0 .35em;border-radius:.25em;font-size:.7em;font-weight:700;vertical-align:middle}
-.tag.rush{background:#ff3b30;color:#fff}.tag.manual{background:#3a4350;color:#dfe5ec}
+.tag.rush{background:#ff3b30;color:#fff}.tag.late{background:#8b1a10;color:#ffd7d0}.tag.manual{background:#3a4350;color:#dfe5ec}
 .unapproved{border-color:var(--grey)}.unapproved .label{color:#c3c8cf}
 .approved{border-color:var(--amber)}.approved .label{color:var(--amber)}
 .queued{border-color:var(--blue)}.queued .label{color:#7fa8ff}
@@ -199,14 +219,22 @@ border-radius:.45em;background:#1c222a;border-left:.55em solid var(--grey)}
 .card{margin:.3em 0;padding:.35em .5em;border-radius:.35em;background:#1c222a;border-left:.4em solid var(--grey);font-size:.78em}
 .card .job{font-weight:700}.card .facts{color:#aab2bd}.card.unapproved{border-color:var(--grey)}.card.approved{border-color:var(--amber)}
 .card.queued{border-color:var(--blue)}.card.printing{border-color:var(--bright)}.card.part{border-color:var(--teal)}.card.printed{border-color:var(--green);opacity:.7}
-.card.maintenance{border-color:var(--maint);background:#211d2c}.card.held{opacity:.6}`;
+.card.maintenance{border-color:var(--maint);background:#211d2c}.card.held{opacity:.6}
+.shift{display:flex;flex-wrap:wrap;align-items:center;gap:.4em 1.2em;margin:.6em 1em 0;padding:.5em .9em;border-radius:.45em;background:#16302a;color:#d6efe6}
+.shift form{margin:0 0 0 auto}button{font:inherit;padding:.3em .9em;border-radius:.35em;border:0;background:#3a4350;color:#eef1f4}
+.handover{margin:.6em 1em 0;padding:.6em .9em;border-radius:.45em;background:#5a4210;color:#ffe7b3;font-weight:700}
+.signin{display:flex;flex-wrap:wrap;gap:1.4em;align-items:center;margin:.8em 1em;padding:1em 1.2em;border-radius:.6em;background:#1d2733;outline:.2em solid #f0a020}
+.signin h2{margin:0 0 .3em;color:#ffd27a;font-size:1.3em;text-transform:none;letter-spacing:0}.signin .code{font-size:3.4em;font-weight:800;letter-spacing:.12em;font-variant-numeric:tabular-nums}
+.signin p{margin:.3em 0;color:#cfd6de}.signin a.pin{display:inline-block;margin-top:.4em;padding:.45em 1em;border-radius:.4em;background:#3a4350;color:#fff;text-decoration:none;font-weight:700}
+.pad{display:grid;grid-template-columns:repeat(3,4.2em);gap:.5em;margin:1em}.pad button{font-size:1.6em;padding:.5em 0;background:#26303b}.pad button.go{background:#2e9e4f}
+.dots{margin:0 1em;font-size:2.4em;letter-spacing:.3em;min-height:1.3em}.err{margin:.4em 1em;color:#ff8a80;font-weight:700}`;
 
 const legend = `<div class="legend"><span style="--c:var(--grey)">Not approved</span><span style="--c:var(--amber)">Approved, not on the press</span>
 <span style="--c:var(--blue)">On the press</span><span style="--c:var(--bright)">Printing now</span><span style="--c:var(--teal)">Part printed</span>
 <span style="--c:var(--green)">Printed</span><span style="--c:var(--orange)">Needs confirming</span><span style="--c:var(--maint)">Maintenance</span></div>`;
 
-const page = (title, body) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="60"><title>${esc(title)}</title><style>${style}</style></head><body>${body}</body></html>`;
+const page = (title, body, refresh = 60) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="${refresh}"><title>${esc(title)}</title><style>${style}</style></head><body>${body}</body></html>`;
 
 function row(r, day, big = false) {
   const facts = r.maintenance ? (r.anyTime ? `${hm(r.minutes)} · any time` : hm(r.minutes))
@@ -225,11 +253,12 @@ ${h.shiftLeft !== undefined ? `<span class="${h.toPrint > h.shiftLeft ? 'over' :
 }
 
 /// Today's board; refreshes itself every minute. No scripts, so it suits a kiosk browser.
-export function renderBoard(data, {weekHref = 'week'} = {}) {
+export function renderBoard(data, {weekHref = 'week', shift = null, key = ''} = {}) {
   const updated = new Date(data.now).toLocaleTimeString('en-AU', {hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne'});
   const list = (rows, big) => rows.length ? `<ol>${rows.map(r => row(r, data.day, big)).join('')}</ol>` : '';
   const next = [...data.next, ...data.maintenance];
   return page('Indigo board', `<header><h1>Indigo · ${esc(dayLabel(data.day))}</h1><div class="meta">${data.counts.printed} of ${data.counts.planned} printed · updated ${esc(updated)} · <a href="${esc(weekHref)}">Week</a></div></header>
+${shiftPanel(shift, key)}
 ${hoursLine(data.hours)}
 ${data.problems.map(p => `<div class="problem">${esc(p)}</div>`).join('')}
 ${data.current.length ? `<h2>Printing now</h2>${list(data.current, true)}` : ''}
@@ -237,7 +266,37 @@ ${data.current.length ? `<h2>Printing now</h2>${list(data.current, true)}` : ''}
 ${data.held.length ? `<h2>Held</h2>${list(data.held)}` : ''}
 ${data.done.length ? `<h2>Done today</h2>${list(data.done)}` : ''}
 ${data.tomorrow.length ? `<h2>${esc(dayLabel(data.tomorrowDay))} · ${hm(data.tomorrowHours.booked)} booked, ${hm(data.tomorrowHours.left)} left</h2>${list(data.tomorrow.map(r => ({...r, start: r.maintenance ? r.start : null, due: null})))}` : ''}
-${legend}`);
+${legend}`, !shift ? 60 : !shift.operator ? 15 : shift.warning ? 30 : 60);
+}
+
+const firstName = name => String(name ?? '').split(/\s+/)[0];
+const ampm = minute => { const h = Math.floor(minute / 60), m = minute % 60; return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''}${h < 12 ? 'am' : 'pm'}`; };
+const untilLabel = iso => new Date(iso).toLocaleTimeString('en-AU', {hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne'}).replace(' ', '').toLowerCase();
+
+/// Who is at the press; while nobody is, the sign-in code, its QR code and the PIN button.
+function shiftPanel(shift, key) {
+  if (!shift) return '';
+  if (shift.operator) {
+    const w = shift.warning;
+    return `<div class="shift"><span>Operator <b>${esc(shift.operator.name)}</b> · signed in until ${esc(untilLabel(shift.operator.until))}</span>
+<form method="post" action="${esc(key)}/sign-out"><button>Sign out</button></form></div>
+${w ? `<div class="handover">${esc(firstName(shift.operator.name))} is signed out at ${esc(ampm(w.ends))}.${w.next ? ` ${esc(firstName(w.next.name))} starts at ${esc(ampm(w.next.start))} and signs in then.` : ''}</div>` : ''}`;
+  }
+  const due = shift.onNow.length ? `On shift now: ${shift.onNow.map(s => `${firstName(s.name)} (${ampm(s.start)}–${ampm(s.end)})`).join(', ')}.`
+    : shift.next ? `Next on shift: ${firstName(shift.next.name)} at ${ampm(shift.next.start)}.` : '';
+  return `<section class="signin"><div>${qrSvg('SLP-PRESS:' + shift.code, {size: 220})}</div><div>
+<h2>Nobody is signed in at the press</h2><div class="code">${esc(shift.code.slice(0, 3))} ${esc(shift.code.slice(3))}</div>
+<p>Scan with Sunnyland Production, or type this code in the app.</p>${due ? `<p>${esc(due)}</p>` : ''}
+<a class="pin" href="${esc(key)}/pin">Use my PIN</a></div></section>`;
+}
+
+/// The PIN pad: no scripts, each key posts back the digits so far.
+export function renderPin({digits = '', error = '', key = ''} = {}) {
+  const button = v => `<button name="k" value="${v}"${v === 'enter' ? ' class="go"' : ''}>${v === 'back' ? '⌫' : v === 'enter' ? 'OK' : v}</button>`;
+  return page('Sign in at the press', `<header><h1>Sign in at the Indigo</h1><div class="meta"><a href="../${esc(key)}">Back to the board</a></div></header>
+${error ? `<div class="err">${esc(error)}</div>` : ''}<div class="dots">${'●'.repeat(digits.length) || '&nbsp;'}</div>
+<form method="post" action="pin"><input type="hidden" name="d" value="${esc(digits)}"><div class="pad">
+${['1', '2', '3', '4', '5', '6', '7', '8', '9', 'back', '0', 'enter'].map(button).join('')}</div></form>`, 120);
 }
 
 /// Monday-Saturday week page.
@@ -258,6 +317,11 @@ ${data.problems.map(p => `<div class="problem">${esc(p)}</div>`).join('')}
 function inputs(store, {watch, now}) {
   return {runs: store.all('printPlanRun'), blocks: maintenanceRows(store), watch, links: jobLinks(store), open: openDays(store),
     printed: new Map(store.all('indigoPrinted').map(r => [jobKey(r.job), r])), day: finishDay(now.toISOString()), now, hidden: hiddenJobs(store)};
+}
+/// True while the Indigo is printing (fresh watch only).
+export function pressPrinting(watch, now = new Date()) {
+  if (!watch || (now - Date.parse(watch.generatedAt)) / 60000 > watchStaleMinutes) return false;
+  return printingJob(watch, now) !== null;
 }
 export const boardFor = (store, {watch, now = new Date()}) => boardData(inputs(store, {watch, now}));
 export const weekFor = (store, {watch, now = new Date(), next = false}) => weekData({...inputs(store, {watch, now}), next});

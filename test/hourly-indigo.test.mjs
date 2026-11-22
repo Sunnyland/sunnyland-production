@@ -178,3 +178,44 @@ test('old completed job is hidden across staff lists, default and inclusive sear
  assert.equal((await get('/api/press-results?jobNo='+old)).status,404);
  assert.ok(s.get('sample','video'));assert.ok(s.get('job',old));
 });
+
+const feedJob=(job,extra={})=>({job,state:'open',due:'2026-11-26',name:'Job '+job,printiqId:Number(job.slice(1)),rep:{name:'Sam Rep',email:'sam@sunnyland.test'},
+  runs:[{id:'run-'+job,part:'Text',stock:'20415 320x450',minutes:60,finishes:'None',operation:'op-'+job,operationKey:'1'+job.slice(1)}],...extra});
+const feedOf=jobs=>({schema:3,asOf:stamp,generatedAt:stamp,history:[],jobs});
+const mails=s=>s.db.prepare("SELECT body FROM outbox WHERE channel='mail' ORDER BY created,id").all().map(r=>JSON.parse(r.body));
+
+test('unapproved jobs due in the next five working days are pencilled in after approved work; older ones are not',t=>{
+ const s=setup(t);
+ planHourly(s,feedOf([feedJob('J000001'),feedJob('J000002',{state:'Awaiting current artwork approval',due:'2026-11-25'}),
+   feedJob('J000003',{state:'Awaiting current artwork approval',due:'2026-12-04'}),feedJob('J000004',{state:'Awaiting current artwork approval',due:'2026-11-10'})]),now);
+ const runs=Object.fromEntries(s.all('printPlanRun').map(r=>[r.job,r]));
+ assert.deepEqual(Object.keys(runs).sort(),['J000001','J000002']);
+ assert.equal(runs.J000002.provisional,true);assert.equal(runs.J000001.provisional,false);
+ // Approved later: the same run firms up.
+ planHourly(s,{...feedOf([feedJob('J000001'),feedJob('J000002',{due:'2026-11-25'})]),generatedAt:new Date(+now+60000).toISOString(),asOf:new Date(+now+60000).toISOString()},new Date(+now+120000));
+ assert.equal(s.get('printPlanRun','run-J000002').provisional,false);
+ assert.equal(mails(s).length,0);
+});
+
+test('a job that cannot make its due date is booked on the earliest day, flagged late, and the rep is emailed once',t=>{
+ const s=setup(t);
+ s.put('printPlanRun',{id:'full',job:'J000900',name:'Big job',press:indigo,day:monday,minutes:430,fixedStart:null,earliestStart:null,managerOverride:true});
+ const f=feedOf([feedJob('J000010',{due:'2026-11-23'})]);
+ planHourly(s,f,now);
+ const run=s.get('printPlanRun','run-J000010');
+ assert.equal(run.day,tuesday);assert.equal(run.late,true);assert.equal(run.bestDispatch,'2026-11-25');
+ let sent=mails(s);
+ assert.equal(sent.length,1);assert.equal(sent[0].to,'sam@sunnyland.test');
+ assert.match(sent[0].subject,/J000010 .*best-case dispatch Wednesday 25 November \(due Monday 23 November\)/);
+ assert.match(sent[0].text,/booked on the Indigo for Tuesday 24 November/);
+ assert.match(hourlySummary(s,now).review.map(r=>r.reason).join(),/Late: printing 2026-11-24, best-case dispatch 2026-11-25/);
+ // The next hourly pass with the same answer sends nothing new.
+ const later=new Date(+now+3600000);
+ planHourly(s,{...f,asOf:later.toISOString(),generatedAt:later.toISOString()},later);
+ assert.equal(mails(s).length,1);
+ // No rep email in printIQ: the managers get it.
+ const t2=setup(t);t2.user('boss@sunnyland.test','a-long-test-password','manager','Boss');
+ t2.put('printPlanRun',{id:'full',job:'J000900',name:'Big job',press:indigo,day:monday,minutes:430,fixedStart:null,earliestStart:null,managerOverride:true});
+ planHourly(t2,feedOf([feedJob('J000011',{due:'2026-11-23',rep:null})]),now);
+ sent=mails(t2);assert.equal(sent.length,1);assert.equal(sent[0].to,'boss@sunnyland.test');assert.match(sent[0].text,/No rep email/);
+});

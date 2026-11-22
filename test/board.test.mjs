@@ -33,12 +33,13 @@ test('each run shows where the job really is, printing first and printed moving 
     run('J800', {day: '2026-11-24'}), run('J900', {removed: true}), run('J950', {press: 'Ryobi 755'})],
     watch: watch({approvals: {J200: {approved: true}, J300: {approved: true}, J400: {approved: true}},
       queue: {J300: {status: 'Queued', last: now.toISOString()}, J400: {status: 'Printing', last: now.toISOString()},
-        J990: {status: 'Printing', last: now.toISOString()}}}),
+        J990: {status: 'Running', last: new Date(+now - 2 * 3600000).toISOString()}, J991: {status: 'Running', last: new Date(+now - 65 * 3600000).toISOString()}}}),
     printed, day, now});
   assert.deepEqual(byJob(data), {J100: 'unapproved', J200: 'approved', J300: 'queued', J400: 'printing', J500: 'part', J600: 'printed',
-    J700: 'part', J990: 'printing'});
-  assert.deepEqual(data.current.map(r => r.job).sort(), ['J400', 'J990']);
-  assert.equal(data.current.find(r => r.job === 'J990').status.detail, 'Not on today’s plan');
+    J700: 'part', J990: 'queued'});
+  // Only the newest "Running" entry is printing; an older one is on the press; one from Friday is left off.
+  assert.deepEqual(data.current.map(r => r.job), ['J400']);
+  assert.equal(data.next.find(r => r.job === 'J990').status.label, 'On the press');
   assert.equal(data.done.map(r => r.job).join(), 'J600');
   assert.equal(data.next.find(r => r.job === 'J500').status.detail, '500 of 850 sheets');
   assert.equal(data.next.find(r => r.job === 'J700').status.confirm, true);
