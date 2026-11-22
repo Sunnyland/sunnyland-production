@@ -2,6 +2,7 @@ import {rememberStatus} from './job-visibility.mjs';
 import {printIQJobKey} from './job-tickets.mjs';
 import {openSync, closeSync, fstatSync, readFileSync, constants} from 'node:fs';
 import {choosePrintDay, earliestPressStart, finishDay, plantMinute, sequencePressDay} from './print-planning.mjs';
+import {maintenanceRows, openDays} from './press-plan.mjs';
 import {Fault} from './core.mjs';
 import {byPriority,plannerSettings,withFinishingPlan} from './indigo-sequence.mjs';
 
@@ -42,7 +43,7 @@ export function planHourly(store,feed,now=new Date()){
     for(const row of feed.visibility??[])rememberStatus(store,row,feed.asOf);
     const observedComplete=new Set((feed.visibility??[]).filter(v=>v.completedAt || v.complete).map(v=>v.job));
     for(const row of feed.jobs)if(row.state==='complete' && !observedComplete.has(row.job))rememberStatus(store,{...row,complete:true},feed.asOf);
-    const day=finishDay(now.toISOString()), minute=plantMinute(now), bookings=store.all(kind);
+    const day=finishDay(now.toISOString()), minute=plantMinute(now), bookings=[...store.all(kind),...maintenanceRows(store)],open=openDays(store);
     const changed=new Map(),kept=[],future=new Map(),pending=[],review=[];
     const jobKey=value=>printIQJobKey(value)??value;
     const localOps=store.all('operation'),holds=new Set(store.all('hold').filter(h=>!h.releasedAt).map(h=>jobKey(h.job)));
@@ -62,7 +63,7 @@ export function planHourly(store,feed,now=new Date()){
             (!job && !feed.directoryError && !feed.approvalError)))future.set(b.id,b);
       else kept.push(b);
     }
-    const fixed=kept.filter(b=>!b.removed);
+    const fixed=kept.filter(b=>!b.removed && !b.held);
     for(const job of feed.jobs){
       if(job.state!=='open'){
         if(!['complete','cancelled','other press'].includes(job.state))review.push({id:job.job,job:job.job,reason:job.state});
@@ -89,11 +90,11 @@ export function planHourly(store,feed,now=new Date()){
     pending.sort(byPriority);
     const published=[];
     for(const run of pending){
-      try{run.day=choosePrintDay(run,fixed,now);run.finishingAtRisk=false;}catch(e){
+      try{run.day=choosePrintDay(run,fixed,now,open);run.finishingAtRisk=false;}catch(e){
         if(!(e instanceof Fault))throw e;
         // No day leaves the full finishing time: book the earliest day before the due date and flag it.
         let day=null;
-        if(run.latestPrintDay && run.latestPrintDay<run.due){try{day=choosePrintDay({...run,latestPrintDay:null},fixed,now);}catch(again){if(!(again instanceof Fault))throw again;}}
+        if(run.latestPrintDay && run.latestPrintDay<run.due){try{day=choosePrintDay({...run,latestPrintDay:null},fixed,now,open);}catch(again){if(!(again instanceof Fault))throw again;}}
         if(!day){review.push({id:run.id,job:run.job,reason:e.message});continue;}
         run.day=day;run.finishingAtRisk=true;
         review.push({id:run.id,job:run.job,reason:'Booked '+day+', but that leaves less than the '+run.finishingDays+' working day'+(run.finishingDays===1?'':'s')+' of finishing printIQ estimates'});

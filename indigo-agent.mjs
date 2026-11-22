@@ -6,6 +6,7 @@ import {choosePrintDay,earliestPressStart,finishDay,indigoBookableMinutes} from 
 import {operationEvidence,readRouting} from './production-finishes.mjs';
 import {byPriority,withFinishingPlan} from './indigo-sequence.mjs';
 import {applyWatch,readWatch} from './indigo-watch.mjs';
+import {maintenanceRows,openDays} from './press-plan.mjs';
 import {applyPrinted,decidePrinted,printedDashboard,printedModes,readPrinted} from './indigo-printed.mjs';
 
 const press='HP Indigo 7900', machine={id:'indigo-planning-agent'};
@@ -39,7 +40,9 @@ function hasExistingRun(row,bookings){
 function compute(store,observed,remote,facts,now){
   const evidence=new Map(operationEvidence(store,facts).map(r=>[r.id,r]));
   const holds=store.all('hold').filter(h=>!h.releasedAt);
-  const bookings=store.all(runKind);
+  const bookings=store.all(runKind), open=openDays(store);
+  // Capacity: held runs take no time; maintenance does.
+  const capacity=[...bookings.filter(b=>!b.held),...maintenanceRows(store)];
   const inProgress=store.all('operation').filter(op=>['running','paused'].includes(op.state));
   const rows=store.all(itemKind).filter(r=>r.state==='waiting' && observed.has(r.id)).map(r=>{
     const job=remote.get(r.printiqId), local=store.get('job',r.job);
@@ -57,14 +60,14 @@ function compute(store,observed,remote,facts,now){
     if(!row.reason && hasExistingRun(row,bookings))row.reason='Review an existing Indigo booking';
     if(row.reason)continue;
     try{
-      try{row.day=choosePrintDay({...row,press,fixedStart:null},bookings,now);row.finishingAtRisk=false;}
+      try{row.day=choosePrintDay({...row,press,fixedStart:null},capacity,now,open);row.finishingAtRisk=false;}
       catch(e){
         // No day leaves the full finishing time: take the earliest day before the due date and flag it.
         if(!(e instanceof Fault) || !(row.latestPrintDay && row.latestPrintDay<row.due))throw e;
-        row.day=choosePrintDay({...row,press,fixedStart:null,latestPrintDay:null},bookings,now);row.finishingAtRisk=true;
+        row.day=choosePrintDay({...row,press,fixedStart:null,latestPrintDay:null},capacity,now,open);row.finishingAtRisk=true;
       }
       row.earliestStart=earliestPressStart(press,row.day,now);
-      bookings.push({...row,press,fixedStart:null,agentRelease:true,agentOperation:row.operation});
+      bookings.push({...row,press,fixedStart:null,agentRelease:true,agentOperation:row.operation});capacity.push(bookings.at(-1));
     }catch(e){if(!(e instanceof Fault))throw e;row.reason=e.message;}
   }
   return rows;

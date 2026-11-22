@@ -296,6 +296,16 @@ def acceptance(reader, cache, job, now):
 
 # --- Collect ------------------------------------------------------------------------------------
 
+def job_links(state):
+    """Managers' links: a job number sent to the press by mistake -> the job it belongs to (read-only)."""
+    try:
+        with sqlite3.connect((state.parent / "production.sqlite").as_uri() + "?mode=ro", uri=True) as db:
+            rows = db.execute("SELECT id, json_extract(doc,'$.job') FROM records WHERE kind='pressJobLink' AND json_extract(doc,'$.removed') IS NULL").fetchall()
+    except sqlite3.Error:
+        return {}
+    return {src.jobno(a): src.jobno(b) for a, b in rows if src.jobno(a) and src.jobno(b)}
+
+
 def recent_entries(state, now):
     with sqlite3.connect((state / "observations.sqlite3").as_uri() + "?mode=ro", uri=True) as db:
         rows = [(q, json.loads(raw)) for q, raw in db.execute("SELECT queue_id,entry_json FROM entries")]
@@ -311,6 +321,10 @@ def recent_entries(state, now):
         job = src.jobno(native) if native not in ("000000", "J000000") else None
         found.append({"queueEntryId": entry.get("queueEntryId") or q, "job": job or src.jobno(named or ""),
                       "fromCockpit": bool(job), "part": entry.get("jobPartId"), "submitted": submitted})
+    links = job_links(state)
+    for e in found:
+        if e["job"] in links:
+            e["sentAs"], e["job"] = e["job"], links[e["job"]]
     return [e for e in found if e["job"]]
 
 

@@ -7,6 +7,7 @@ const kind = 'printPlanRun';
 const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 import {finishDay,validDay,hiddenJobs,observeDirectory} from './job-visibility.mjs';
 import {indigoDayOrder,sharesFinishing} from './indigo-sequence.mjs';
+import {maintenanceRows,openDays,planBookings} from './press-plan.mjs';
 export {finishDay} from './job-visibility.mjs';
 const normalized = s => s.trim().toLowerCase().replace(/\s+/g,' ');
 const optionalText = (value,label) => value === '' ? '' : str(value,label,160);
@@ -53,7 +54,7 @@ export function savePrintRun(store,actor,key,body,job) {
       const fixed=body.fixedStart;
       need(fixed===null || (Number.isInteger(fixed) && fixed>=0 && fixed+body.minutes<=1440),'The fixed run must fit within its print date.');
       if (fixed!==null) {
-        const collision=store.all(kind).some(r=>!r.removed && r.id!==body.id && r.day===body.day && r.press===body.press &&
+        const collision=planBookings(store).some(r=>!r.removed && r.id!==body.id && r.day===body.day && r.press===body.press &&
           r.fixedStart!==null && overlaps({start:fixed,end:fixed+body.minutes},{start:r.fixedStart,end:r.fixedStart+r.minutes}));
         need(!collision,'That time overlaps another fixed booking on this press.',409);
       }
@@ -63,10 +64,10 @@ export function savePrintRun(store,actor,key,body,job) {
       const now=new Date();
       if(body.autoDay===true) {
         need(!store.all('hold').some(h=>samePrintIQJob(h.job,job.id) && !h.releasedAt),'Release the job hold before automatic scheduling.',409);
-        run.day=choosePrintDay(run,store.all(kind),now);
+        run.day=choosePrintDay(run,planBookings(store),now,openDays(store));
       }
       if (run.press===indigo) {
-        const others=store.all(kind).filter(b=>b.id!==run.id);
+        const others=planBookings(store).filter(b=>b.id!==run.id);
         const capacity=indigoCapacity(others,run.day,run.press);
         const sameDay=prior?.press===run.press && prior.day===run.day;
         need(capacity.bookedMinutes+run.minutes<=capacity.limitMinutes || (sameDay && run.minutes<=prior.minutes),indigoLimitMessage,409);
@@ -86,21 +87,27 @@ export function savePrintRun(store,actor,key,body,job) {
 
 // Fixed bookings reserve their times. A lower-priority automatic run never pushes
 // a more urgent one later. All times are wall-clock minutes at the plant.
-export function sequencePressDay(rows) {
+export function sequencePressDay(all) {
+  // Held runs take no slot. "Any time" maintenance is kept free at the end of the day. Rush runs go first.
+  const held=all.filter(r=>r.held).map(r=>({...r,start:null,end:null,blocked:'Held'}));
+  const anyTime=all.filter(r=>!r.held && r.maintenance && r.fixedStart===null).map(r=>({...r,start:null,end:null}));
+  const rows=all.filter(r=>!r.held && !(r.maintenance && r.fixedStart===null));
+  const reserve=anyTime.reduce((total,r)=>total+r.minutes,0);
   const fixed=rows.filter(r=>r.fixedStart!==null).map(r=>({...r,start:r.fixedStart,end:r.fixedStart+r.minutes}));
   fixed.sort((a,b)=>a.start-b.start);
   const unfixed=rows.filter(r=>r.fixedStart===null);
   // The Indigo groups paper and shared finishing (see indigo-sequence.mjs); other presses keep due-date order.
-  const auto=unfixed.length && unfixed.every(r=>r.press===indigo) ? indigoDayOrder(unfixed) : unfixed.sort((a,b)=>
+  const ordered=unfixed.length && unfixed.every(r=>r.press===indigo) ? indigoDayOrder(unfixed) : unfixed.sort((a,b)=>
     (a.due??'9999').localeCompare(b.due??'9999') ||
     (normalized(a.stock)||'\uffff').localeCompare(normalized(b.stock)||'\uffff') ||
     (normalized(a.finishes)||'\uffff').localeCompare(normalized(b.finishes)||'\uffff') ||
     a.job.localeCompare(b.job) || a.id.localeCompare(b.id));
+  const auto=[...ordered.filter(r=>r.rush),...ordered.filter(r=>!r.rush)];
   const occupied=fixed.map(({start,end})=>({start,end}));
   const placed=[...fixed];
   for (const r of auto) {
     if (r.blocked) {placed.push({...r,start:null,end:null});continue;}
-    const window=printWindow(r.press);
+    const window={...printWindow(r.press)};window.end-=reserve;
     let start=Math.max(window.start,r.earliestStart??window.start);
     for (const slot of occupied) {
       if (overlaps({start,end:start+r.minutes},slot)) start=slot.end;
@@ -112,7 +119,7 @@ export function sequencePressDay(rows) {
       placed.push({...r,start,end});
     }
   }
-  return placed.sort((a,b)=>(a.start??1441)-(b.start??1441));
+  return [...placed.sort((a,b)=>(a.start??1441)-(b.start??1441)),...anyTime,...held];
 }
 
 export function plantMinute(now) {
@@ -122,7 +129,7 @@ export function plantMinute(now) {
 }
 
 // Match setups only among days that fit the full estimated run by its finish day.
-export function choosePrintDay(run,bookings,now) {
+export function choosePrintDay(run,bookings,now,open=new Set()) {
   const today=finishDay(now.toISOString());
   need(validDay(run.due),'Set a required finish date or choose the print date manually.');
   // Leave the run's finishing time before its due date when the agent has worked it out.
@@ -134,13 +141,14 @@ export function choosePrintDay(run,bookings,now) {
   for(let offset=0,weekdays=0;weekdays<5;offset++){
     const date=new Date(start.getTime()+offset*86400000), day=date.toISOString().slice(0,10);
     if(day>deadline)break;
-    if([0,6].includes(date.getUTCDay()))continue;
+    // Saturdays only when a manager has opened them for automatic booking.
+    if(date.getUTCDay()===0 || (date.getUTCDay()===6 && !open.has(day)))continue;
     weekdays++;
     const same=bookings.filter(r=>!r.removed && r.press===run.press && r.day===day && r.id!==run.id);
     const capacity=indigoCapacity(same,day,run.press);
     if(capacity && capacity.bookedMinutes+run.minutes>capacity.limitMinutes){atCapacity=true;continue;}
     const placed=sequencePressDay([...same,{...run,day,earliestStart:earliestPressStart(run.press,day,now)}]);
-    if(placed.some(r=>r.start===null))continue;
+    if(placed.some(r=>r.start===null && !r.maintenance && !r.held))continue;
     const eligible=same.filter(r=>day!==today || placed.find(p=>p.id===r.id)?.end>plantMinute(now));
     const stocks=eligible.filter(r=>normalized(run.stock) && normalized(r.stock)===normalized(run.stock));
     const finishMatch=(stocks.length?stocks:eligible).some(r=>sharesFinishing(run,r));
@@ -186,7 +194,7 @@ export async function localJobDates(store,iq) {
 
 export async function pressDay(store,iq,day,press) {
   need(validDay(day) && presses.includes(press),'Choose a print date and press.');
-  const rows=store.all(kind).filter(r=>!r.removed && r.day===day && r.press===press);
+  const rows=[...store.all(kind).filter(r=>!r.removed && r.day===day && r.press===press),...maintenanceRows(store).filter(r=>r.day===day && r.press===press)];
   const ids=[...new Set(rows.map(r=>r.printiqId).filter(Boolean))], remote=new Map();
   for (let i=0;i<ids.length;i+=25) {
     const group=ids.slice(i,i+25);
@@ -202,7 +210,8 @@ export async function pressDay(store,iq,day,press) {
   const holds=new Set(store.all('hold').filter(h=>!h.releasedAt).map(h=>h.job));
   observeDirectory(store,[...remote.values()]);
   const hidden=hiddenJobs(store);
-  return sequencePressDay(rows.filter(r=>!hidden(r.job,r.printiqId)).map(r=>{
+  return sequencePressDay(rows.filter(r=>r.maintenance || !hidden(r.job,r.printiqId)).map(r=>{
+    if(r.maintenance)return r;
     const local=store.get('job',r.job);
     const job=r.printiqId?remote.get(r.printiqId):local;
     const matches=Boolean(job) && samePrintIQJob(job.id,r.job) && !(r.printiqId && local?.printiqId && r.printiqId!==local.printiqId);

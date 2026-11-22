@@ -20,6 +20,7 @@ import {createHash} from 'node:crypto';
 import {need} from './core.mjs';
 import {printIQJobKey} from './job-tickets.mjs';
 import {prepareProductionAlerts, queueProductionAlerts} from './indigo-watch.mjs';
+import {jobLinks} from './press-plan.mjs';
 
 export const printedPath = '/var/lib/sunnyland-production/indigo-printed.json';
 export const printedKind = 'indigoPrinted';
@@ -182,6 +183,20 @@ function otherSectionAlerts(store, facts, now) {
   return alerts;
 }
 
+/// Press entries sent under a wrong job number belong to the job a manager linked them to.
+export function linkedJobs(jobs, links) {
+  const byJob = new Map(jobs.map(j => [j.job, {...j, entries: [...j.entries]}]));
+  for (const [wrong, right] of links) {
+    const from = byJob.get(wrong);
+    if (!from) continue;
+    byJob.delete(wrong);
+    const to = byJob.get(right) ?? {job: right, printiq: null, entries: []};
+    to.entries.push(...from.entries.map(e => ({...e, sentAs: wrong})));
+    byJob.set(right, to);
+  }
+  return [...byJob.values()];
+}
+
 /// Runs every minute from the Indigo agent: assess every job in the latest snapshot, write or ask, and alert.
 export function applyPrinted(store, {snapshot, now = new Date(), facts = null}) {
   prepareProductionAlerts(store);
@@ -193,7 +208,7 @@ export function applyPrinted(store, {snapshot, now = new Date(), facts = null}) 
   const alerts = [];
   store.db.exec('BEGIN IMMEDIATE');
   try {
-    for (const snap of status.stale ? [] : snapshot.jobs) {
+    for (const snap of status.stale ? [] : linkedJobs(snapshot.jobs, jobLinks(store))) {
       const old = store.get(printedKind, snap.job);
       if (old?.done) continue;
       const a = assessPrinted(snap, {settings, ignored: new Set(old?.ignored ?? []), asProof: new Set(old?.asProof ?? [])});

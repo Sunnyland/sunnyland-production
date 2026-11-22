@@ -1,5 +1,8 @@
 import {hiddenJobs,observeDirectory,directoryCutoff} from './job-visibility.mjs';
 import {indigoPlanner} from './indigo-agent.mjs';
+import {readWatch} from './indigo-watch.mjs';
+import {boardFor,boardLinkValid,renderBoard,renderWeek,weekFor} from './board.mjs';
+import {planBookings,pressPlanAction} from './press-plan.mjs';
 import {checkFinish,operationEvidence,readRouting,requirementsPath} from './production-finishes.mjs';
 import {indigoCapacity, localJobDates, pressDay, savePrintRun, searchDueJobs} from './print-planning.mjs';
 import {canonicalPressJob} from './press-status.mjs';
@@ -20,7 +23,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import {Store,Fault,need,barcode,stockBarcodeValue} from './core.mjs';
 import {parseAllowedPeers,peerIsAllowed} from './network.mjs';
 const root=fileURLToPath(new URL('.',import.meta.url));
-export function createServer(store,{mediaDir=join(root,'data','media'),allowedPeers=parseAllowedPeers(process.env.SUNNYLAND_ALLOWED_PEERS),iq=createJobsReader(),reviews=clientReviewSettings(),push=appleProvider(),pressStatusFile=process.env.SUNNYLAND_PRESS_STATUS_FILE,requirementsFile=requirementsPath,runIndigoAgent=false}={}){
+export function createServer(store,{mediaDir=join(root,'data','media'),allowedPeers=parseAllowedPeers(process.env.SUNNYLAND_ALLOWED_PEERS),iq=createJobsReader(),reviews=clientReviewSettings(),push=appleProvider(),pressStatusFile=process.env.SUNNYLAND_PRESS_STATUS_FILE,requirementsFile=requirementsPath,runIndigoAgent=false,boardWatch=readWatch,clock=()=>new Date()}={}){
  const press = pressStatusHook(store,{statusFile:pressStatusFile});
  const routing=()=>readRouting(requirementsFile);
  const planner=indigoPlanner(store,iq,{routing});
@@ -29,6 +32,14 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
  const server=http.createServer(async(req,res)=>{const send=(code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
  try{need(peerIsAllowed(req.socket.remoteAddress,allowedPeers),'Connection not permitted.',403);const url=new URL(req.url,'http://localhost'),path=url.pathname;need(!req.headers.origin||new URL(req.headers.origin).host===req.headers.host,'Cross-origin requests are not allowed.',403);
  if(path.startsWith('/sample-review/')) return await publicReview({req,res,url,store,mediaDir,settings:reviews});
+ // Production board for screens: private link, read-only, no sign-in. Refreshes itself every minute.
+ if(path.startsWith('/board/')&&req.method==='GET'){
+   const m=/^\/board\/([A-Za-z0-9_-]{32})(\/week)?$/.exec(path);need(m&&boardLinkValid(store,m[1]),'Not found.',404);
+   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'"});
+   const next=url.searchParams.get('next')==='1',key=m[1];
+   return res.end(m[2]?renderWeek(weekFor(store,{watch:boardWatch(),now:clock(),next}),{todayHref:'../'+key,otherHref:next?'week':'?next=1'})
+     :renderBoard(boardFor(store,{watch:boardWatch(),now:clock()}),{weekHref:key+'/week'}));
+ }
  if(path==='/health'&&req.method==='GET')return send(200,{ok:true,version:'0.1.0'});
  if(path==='/'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'text/html','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'"});return res.end('<!doctype html><title>Sunnyland Production</title><style>body{font:20px system-ui;padding:8vw;color:#143b33;background:#f5f4ee}p{max-width:40em}</style><h1>Sunnyland Production</h1><p>The shared service is running. Connect using the iPhone app. Staff sign-in is required for stock, jobs and media.</p><p>Version 0.1 pilot. Stock counts start unknown until physically verified.</p>');}
  const token=req.headers.authorization?.replace(/^Bearer /,'');let actor=null;if(path!=='/api/login')actor=store.auth(token);
@@ -100,7 +111,7 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
    try {runs=await pressDay(store,iq,url.searchParams.get('pressPlanDay'),url.searchParams.get('press'));}
    catch(error){if(error instanceof Fault)throw error;throw printIQReadError(error);}
    need(canReadJobs(store.auth(token)),'Job access is required.',403);
-   return send(200,{runs,capacity:indigoCapacity(store.all('printPlanRun'),url.searchParams.get('pressPlanDay'),url.searchParams.get('press'))});
+   return send(200,{runs,capacity:indigoCapacity(planBookings(store),url.searchParams.get('pressPlanDay'),url.searchParams.get('press'))});
  }
  if(path==='/api/stock'){return send(200,store.summary(url.searchParams.get('code')));}
  if(path==='/api/resolve' && (url.searchParams.has('jobs') || url.searchParams.has('printJob'))){
@@ -151,6 +162,11 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
    const authorize=()=>{const a=store.auth(token);store.manager(a);need(canReadJobs(a),'Job access is required.',403);return a;};
    need(body && typeof body==='object','Invalid planner action.');
    return send(200,await planner.control(authorize(),req.headers['idempotency-key'],body,authorize));
+ }
+ if(path==='/api/action' && url.searchParams.get('pressPlan')==='1'){
+   // Manager changes to the press plan: rush, hold, on the press, maintenance, job-number links, Saturdays.
+   need(canReadJobs(actor),'Job access is required.',403);need(body && typeof body==='object','Invalid plan change.');
+   return send(200,pressPlanAction(store,actor,req.headers['idempotency-key'],body));
  }
  if(path==='/api/action' && url.searchParams.get('checkedPrintFinish')==='1'){
    need(canReadJobs(actor),'Job access is required.',403);need(body && typeof body==='object','Invalid Printing operation.');
