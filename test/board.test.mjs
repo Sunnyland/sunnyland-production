@@ -41,7 +41,7 @@ test('each run shows where the job really is, printing first and printed moving 
   assert.deepEqual(data.current.map(r => r.job), ['J400']);
   assert.equal(data.next.find(r => r.job === 'J990').status.label, 'On the press');
   assert.equal(data.done.map(r => r.job).join(), 'J600');
-  assert.equal(data.next.find(r => r.job === 'J500').status.detail, '500 of 850 sheets');
+  assert.equal(data.next.find(r => r.job === 'J500').status.detail, '500 of 850 sheets printed');
   assert.equal(data.next.find(r => r.job === 'J700').status.confirm, true);
   assert.deepEqual(data.tomorrow.map(r => r.job), ['J800']);
   assert.deepEqual(data.counts, {planned: 7, printed: 1, waitingApproval: 1});
@@ -132,14 +132,19 @@ test('rows show the client and job title, from the run or the hourly feed (also 
 test('with the press reading: Printing now is the job the press prints; loaded jobs are On the press; RIP entries say Ripping or Ripped', () => {
   const press = {schema: 1, ok: true, generatedAt: new Date(+now - 30000).toISOString(), press: {status: 'Printing', since: new Date(+now - 3600000).toISOString()},
     printing: {job: 'J064248', jobId: '114358', name: '064248b VK Mallee Text', copies: 110, sheets: 257, substrate: '80 Offset', since: new Date(+now - 20 * 60000).toISOString()},
-    loaded: [{job: 'J200', status: 'loaded'}, {job: null, name: 'Imaging Associates reorder', status: 'needs attention'}], today: {printingMinutes: 125, stoppedMinutes: 40}};
+    loaded: [{job: 'J200', status: 'loaded'}, {job: null, name: 'Imaging Associates reorder', status: 'needs attention'}, {job: 'J600', status: 'needs attention', location: 'held'}],
+    today: {printingMinutes: 125, stoppedMinutes: 40}};
   const w = watch({queue: {J300: {status: 'Running', last: now.toISOString()}, J400: {status: 'Completed', last: now.toISOString()},
+    J700: {status: 'Running', last: new Date(+now - 3 * 3600000).toISOString()},
     J064248: {status: 'Completed', last: new Date(+now - 86400000).toISOString()}}});
-  const data = boardData({runs: [run('J200'), run('J300'), run('J400'), run('J500')], watch: w, printed: new Map(), day, now, press});
+  const printed = new Map([['J800', {job: 'J800', state: 'confirm', printed: 412, reasons: ['No Prinect Cockpit imposition was found for the production run, so the sheets needed are unknown.']}]]);
+  const data = boardData({runs: [run('J200'), run('J300'), run('J400'), run('J500'), run('J600'), run('J700'), run('J800')], watch: w, printed, day, now, press});
   const s = Object.fromEntries([...data.current, ...data.next].map(r => [r.job, r.status]));
   assert.equal(s.J064248.label, 'Printing now'); assert.match(s.J064248.detail, /110 copies × 257 sheets · not on today’s plan/);
   assert.equal(s.J200.label, 'On the press'); assert.equal(s.J300.label, 'Ripping'); assert.equal(s.J400.label, 'Ripped');
   assert.equal(s.J500.key, 'unapproved');
+  assert.equal(s.J600.label, 'On the press — held'); assert.equal(s.J700.label, 'Ripped', 'a RIP entry still "Running" after hours is ripped');
+  assert.match(s.J800.detail, /412 sheets printed \(sheets needed unknown\) · No Prinect Cockpit imposition/);
   assert.deepEqual(data.current.map(r => r.job), ['J064248']);
   assert.equal(data.press.status, 'Printing');
   assert.match(renderBoard(data), /Printing today <b>2h05<\/b>/);

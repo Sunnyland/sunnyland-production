@@ -3,6 +3,7 @@
 
   GET {PRESS}/prodflow/rest/devices/2                  -> the press status ("Printing" while it runs)
   GET {PRESS}/prodflow/rest/devices/2/jobs?list=pq     -> the press print queue; the "printing" job is on the press now
+  GET {PRESS}/prodflow/rest/devices/2/jobs?list=hl     -> jobs held on the press (ripped, waiting for the operator)
 
 Writes /var/lib/sunnyland-production/indigo-press.json (root, group sunnyland-production, 0640): the printing job, the
 next jobs loaded on the press, today's printing and stopped minutes, and a history of runs (start, end, copies, sheets,
@@ -51,7 +52,7 @@ def whole(value):
         return None
 
 
-def queue_rows(data):
+def queue_rows(data, location="queue"):
     rows = []
     for j in data.get("Jobs") or []:
         p = j.get("properties") or {}
@@ -59,12 +60,12 @@ def queue_rows(data):
                      "name": str(p.get("Name") or "").strip()[:140], "job": job_number(p.get("Name")), "jobId": str(p.get("Job_Id") or ""),
                      "copies": whole(p.get("Copy_Range")), "sheets": whole(p.get("Sheets")),
                      "substrate": str(p.get("Substrate_Name") or "").split('"')[1] if '"' in str(p.get("Substrate_Name") or "") else str(p.get("Substrate_Name") or "")[:60],
-                     "duplex": p.get("Duplex") == "Yes", "priority": p.get("Priority"), "received": p.get("Received_TimeEN")})
+                     "duplex": p.get("Duplex") == "Yes", "priority": p.get("Priority"), "received": p.get("Received_TimeEN"), "location": location})
     rows.sort(key=lambda r: (r["position"] is None, r["position"] or 0))
     return rows
 
 
-def advance(prev, status, queue, now):
+def advance(prev, status, queue, now, held=()):
     """New state from the previous one and this minute's reading: runs start/end, printing/stopped minutes add up."""
     day = now.astimezone(MEL).strftime("%Y-%m-%d")
     state = {"schema": 1, "generatedAt": now.isoformat(), "device": DEVICE, "ok": True, "reason": None,
@@ -90,7 +91,7 @@ def advance(prev, status, queue, now):
         state["history"].append({**{k: was.get(k) for k in ("jobId", "job", "name", "copies", "sheets", "substrate", "duplex")},
                                  "startedAt": was["since"], "endedAt": now.isoformat(), "minutes": round((now - start).total_seconds() / 60, 1)})
         state["history"] = state["history"][-HISTORY:]
-    state["loaded"] = [r for r in queue if r["status"] != "printing"][:15]
+    state["loaded"] = ([r for r in queue if r["status"] != "printing"] + list(held))[:60]
     return state
 
 
@@ -115,6 +116,7 @@ def main():
     try:
         device = read_json(f"{PRESS}/prodflow/rest/devices/{DEVICE}", opener)
         queue = queue_rows(read_json(f"{PRESS}/prodflow/rest/devices/{DEVICE}/jobs?list=pq", opener))
+        held = queue_rows(read_json(f"{PRESS}/prodflow/rest/devices/{DEVICE}/jobs?list=hl&count=200&start=0", opener), "held")
         status = str((device.get("properties") or {}).get("status") or "Unknown")
     except (OSError, ValueError) as error:
         if prev:
@@ -122,10 +124,10 @@ def main():
             write(prev)
         print("Indigo press: could not read Production Pro (" + type(error).__name__ + "). Previous reading kept.", file=sys.stderr)
         sys.exit(1)
-    state = advance(prev, status, queue, now)
+    state = advance(prev, status, queue, now, held)
     write(state)
     p = state["printing"]
-    print("Indigo press:", status, "·", f"printing {p['job'] or p['name'][:40]}" if p else "nothing printing", "·", len(queue), "in the press queue")
+    print("Indigo press:", status, "·", f"printing {p['job'] or p['name'][:40]}" if p else "nothing printing", "·", len(queue), "in the press queue,", len(held), "held")
 
 
 if __name__ == "__main__":

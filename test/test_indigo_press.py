@@ -39,6 +39,9 @@ class Press(unittest.TestCase):
         self.assertEqual(s4["today"]["printingMinutes"], 2.0)
         s5 = p.advance(s4, "Idle", [], NOW + timedelta(minutes=44))
         self.assertEqual(s5["today"]["stoppedMinutes"], 2.0); self.assertEqual(s5["press"]["since"], s4["press"]["since"])
+        held = p.queue_rows({"Jobs": [job(0, "needs attention", "J064343 ELT 2027 Posters Lay", "114800", copies=1, sheets=281)]}, "held")
+        s7 = p.advance(s5, "Idle", [], NOW + timedelta(minutes=45), held)
+        self.assertEqual(s7["loaded"][0]["job"], "J064343"); self.assertEqual(s7["loaded"][0]["location"], "held")
         # A new plant day starts the minutes again; history is kept.
         s6 = p.advance(s5, "Idle", [], NOW + timedelta(hours=10))
         self.assertEqual(s6["today"]["printingMinutes"], 0); self.assertEqual(len(s6["history"]), 2)

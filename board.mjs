@@ -53,33 +53,40 @@ export function queueState(entry) {
 }
 
 const sheets = n => n.toLocaleString('en-AU');
+/// "412 of 850 sheets printed" (or "412 sheets printed" when the sheets needed aren't known).
+const ofSheets = p => `${sheets(p.printed ?? 0)}${p.needed ? ' of ' + sheets(p.needed) : ''} sheets printed`;
 
 /// Pure: status of one run from the watch, the printed check and manager changes.
-function statusOf(run, {approvals, queueFor, printed, live, printingNow, loaded}) {
+function statusOf(run, {approvals, queueFor, printed, live, printingNow, loaded, now}) {
   if (run.maintenance) return {key: 'maintenance', label: 'Maintenance', detail: run.name ?? ''};
   const job = jobKey(run.job), p = printed.get(job), qs = queueState(queueFor(job)), approval = approvals[job];
   const base = {confirm: p?.state === 'confirm' && !p.done, rush: Boolean(run.rush), late: run.late ? run.bestDispatch ?? true : null,
     manual: Boolean(run.managerOverride || (run.fixedStart !== null && run.fixedStart !== undefined))};
   if (run.held) return {...base, key: 'held', label: 'Held', detail: run.held.reason ?? ''};
-  if (p?.done) return {...base, key: 'printed', label: 'Printed', detail: p.printed ? `${sheets(p.printed)} sheets` : ''};
+  if (p?.done) return {...base, key: 'printed', label: 'Printed', detail: p.printed ? ofSheets(p) : ''};
   if (live) {
     // What the press says, then what the RIP says.
     const pressJob = printingNow && printingNow.job === job ? printingNow : null, onPress = loaded.get(job);
-    const sofar = p?.printed ? ` · ${sheets(p.printed)}${p.needed ? ' of ' + sheets(p.needed) : ''} sheets printed` : '';
+    const sofar = p?.printed ? ' · ' + ofSheets(p) + ' so far' : '';
     if (pressJob) return {...base, key: 'printing', label: live.press?.status === 'Printing' ? 'Printing now' : 'On the press — stopped',
       detail: `${pressJob.copies ?? '?'} copies × ${pressJob.sheets ?? '?'} sheets · ${pressJob.substrate ?? ''}${sofar}`};
-    if (p?.state === 'part') return {...base, key: 'part', label: 'Part printed', detail: `${sheets(p.printed)} of ${sheets(p.needed)} sheets`};
-    if (p?.state === 'confirm') return {...base, key: 'part', label: 'Printed — needs confirming', detail: `${sheets(p.printed)} sheets`};
-    if (onPress) return {...base, key: 'queued', label: 'On the press', detail: onPress.status === 'needs attention' ? 'Loaded — needs attention' : 'Loaded, waiting to print'};
-    if (qs === 'printing') return {...base, key: 'ripping', label: 'Ripping', detail: 'Production Pro is processing it'};
+    if (p?.state === 'part') return {...base, key: 'part', label: 'Part printed', detail: ofSheets(p)};
+    if (p?.state === 'confirm') return {...base, key: 'part', label: 'Printed — needs confirming', detail: `${ofSheets(p)}${p.needed ? '' : ' (sheets needed unknown)'}${p.reasons?.length ? ' · ' + p.reasons[0] : ''}`};
+    if (onPress) return {...base, key: 'queued', label: onPress.location === 'held' ? 'On the press — held' : 'On the press',
+      detail: onPress.location === 'held' ? 'Ripped and held on the press' + (onPress.status === 'needs attention' ? ' · needs attention' : '')
+        : onPress.status === 'needs attention' ? 'Loaded — needs attention' : 'Loaded, waiting to print'};
+    // Production Pro leaves RIP entries at "Running" long after ripping, so only the first 15 minutes count as ripping.
+    const sentAt = Date.parse(queueFor(job)?.last ?? '');
+    if (qs === 'printing' && Number.isFinite(sentAt) && now - sentAt < 15 * 60000) return {...base, key: 'ripping', label: 'Ripping', detail: 'Production Pro is processing it'};
+    if (qs === 'printing') return {...base, key: 'ripped', label: 'Ripped', detail: 'Not loaded on the press yet'};
     if (qs === 'queued' || qs === 'completed') return {...base, key: 'ripped', label: 'Ripped', detail: 'Not loaded on the press yet'};
     if (run.onPress) return {...base, key: 'queued', label: 'On the press', detail: 'Marked by a manager'};
     if (approval?.approved) return {...base, key: 'approved', label: 'Approved — not on the press', detail: ''};
     return {...base, key: 'unapproved', label: run.provisional ? 'Not approved — pencilled in' : 'Not approved', detail: run.provisional ? 'Firms up when the artwork is approved' : ''};
   }
-  if (qs === 'printing') return {...base, key: 'printing', label: 'Printing now', detail: p?.printed ? `${sheets(p.printed)}${p.needed ? ' of ' + sheets(p.needed) : ''} sheets so far` : ''};
-  if (p?.state === 'part') return {...base, key: 'part', label: 'Part printed', detail: `${sheets(p.printed)} of ${sheets(p.needed)} sheets`};
-  if (p?.state === 'confirm') return {...base, key: 'part', label: 'Printed — needs confirming', detail: `${sheets(p.printed)} sheets`};
+  if (qs === 'printing') return {...base, key: 'printing', label: 'Printing now', detail: p?.printed ? ofSheets(p) + ' so far' : ''};
+  if (p?.state === 'part') return {...base, key: 'part', label: 'Part printed', detail: ofSheets(p)};
+  if (p?.state === 'confirm') return {...base, key: 'part', label: 'Printed — needs confirming', detail: `${ofSheets(p)}${p.needed ? '' : ' (sheets needed unknown)'}${p.reasons?.length ? ' · ' + p.reasons[0] : ''}`};
   if (qs === 'queued') return {...base, key: 'queued', label: 'On the press', detail: queueFor(job)?.stale ? 'Sent to the press; no finish reported yet' : 'In the Indigo queue'};
   if (qs === 'completed') return {...base, key: 'part', label: 'Printed — counting sheets', detail: 'Checked within 10 minutes'};
   if (run.onPress) return {...base, key: 'queued', label: 'On the press', detail: 'Marked by a manager'};
@@ -164,7 +171,7 @@ function context({watch, printed, links, now = new Date(), info = new Map(), pre
   const right = job => job && (links.get(job) ?? job);
   const printingNow = live?.printing?.job ? {...live.printing, job: right(live.printing.job)} : null;
   const loaded = new Map((live?.loaded ?? []).filter(r => r.job).map(r => [right(r.job), r]));
-  return {approvals: watch?.approvals ?? {}, queueFor, printed, info, live, printingNow, loaded};
+  return {approvals: watch?.approvals ?? {}, queueFor, printed, info, live, printingNow, loaded, now};
 }
 
 function problemsOf(watch, now) {
@@ -191,7 +198,7 @@ export function boardData({runs, blocks = [], watch, printed, links = new Map(),
   for (const p of printed.values()) {
     if (p.done && finishDay(p.done.at) === day && !onPlan.has(p.job) && !hidden(p.job))
       done.push({id: 'printed:' + p.job, job: p.job, name: info.get(jobKey(p.job))?.name ?? '', customer: info.get(jobKey(p.job))?.customer ?? '', part: p.done.section ?? '', stock: '', finishes: '', due: null, start: null,
-        status: {key: 'printed', label: 'Printed', detail: `${sheets(p.printed)} sheets`}});
+        status: {key: 'printed', label: 'Printed', detail: ofSheets(p)}});
   }
   const pn = ctx.printingNow;
   if (pn && !onPlan.has(pn.job ?? '')) {
