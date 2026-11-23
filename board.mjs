@@ -55,13 +55,28 @@ export function queueState(entry) {
 const sheets = n => n.toLocaleString('en-AU');
 
 /// Pure: status of one run from the watch, the printed check and manager changes.
-function statusOf(run, {approvals, queueFor, printed}) {
+function statusOf(run, {approvals, queueFor, printed, live, printingNow, loaded}) {
   if (run.maintenance) return {key: 'maintenance', label: 'Maintenance', detail: run.name ?? ''};
   const job = jobKey(run.job), p = printed.get(job), qs = queueState(queueFor(job)), approval = approvals[job];
   const base = {confirm: p?.state === 'confirm' && !p.done, rush: Boolean(run.rush), late: run.late ? run.bestDispatch ?? true : null,
     manual: Boolean(run.managerOverride || (run.fixedStart !== null && run.fixedStart !== undefined))};
   if (run.held) return {...base, key: 'held', label: 'Held', detail: run.held.reason ?? ''};
   if (p?.done) return {...base, key: 'printed', label: 'Printed', detail: p.printed ? `${sheets(p.printed)} sheets` : ''};
+  if (live) {
+    // What the press says, then what the RIP says.
+    const pressJob = printingNow && printingNow.job === job ? printingNow : null, onPress = loaded.get(job);
+    const sofar = p?.printed ? ` · ${sheets(p.printed)}${p.needed ? ' of ' + sheets(p.needed) : ''} sheets printed` : '';
+    if (pressJob) return {...base, key: 'printing', label: live.press?.status === 'Printing' ? 'Printing now' : 'On the press — stopped',
+      detail: `${pressJob.copies ?? '?'} copies × ${pressJob.sheets ?? '?'} sheets · ${pressJob.substrate ?? ''}${sofar}`};
+    if (p?.state === 'part') return {...base, key: 'part', label: 'Part printed', detail: `${sheets(p.printed)} of ${sheets(p.needed)} sheets`};
+    if (p?.state === 'confirm') return {...base, key: 'part', label: 'Printed — needs confirming', detail: `${sheets(p.printed)} sheets`};
+    if (onPress) return {...base, key: 'queued', label: 'On the press', detail: onPress.status === 'needs attention' ? 'Loaded — needs attention' : 'Loaded, waiting to print'};
+    if (qs === 'printing') return {...base, key: 'ripping', label: 'Ripping', detail: 'Production Pro is processing it'};
+    if (qs === 'queued' || qs === 'completed') return {...base, key: 'ripped', label: 'Ripped', detail: 'Not loaded on the press yet'};
+    if (run.onPress) return {...base, key: 'queued', label: 'On the press', detail: 'Marked by a manager'};
+    if (approval?.approved) return {...base, key: 'approved', label: 'Approved — not on the press', detail: ''};
+    return {...base, key: 'unapproved', label: run.provisional ? 'Not approved — pencilled in' : 'Not approved', detail: run.provisional ? 'Firms up when the artwork is approved' : ''};
+  }
   if (qs === 'printing') return {...base, key: 'printing', label: 'Printing now', detail: p?.printed ? `${sheets(p.printed)}${p.needed ? ' of ' + sheets(p.needed) : ''} sheets so far` : ''};
   if (p?.state === 'part') return {...base, key: 'part', label: 'Part printed', detail: `${sheets(p.printed)} of ${sheets(p.needed)} sheets`};
   if (p?.state === 'confirm') return {...base, key: 'part', label: 'Printed — needs confirming', detail: `${sheets(p.printed)} sheets`};
@@ -98,7 +113,7 @@ function dayPlan({runs, blocks, day, ctx, hidden, now = null}) {
   const placed = live ? sequencePressDay(rows.filter(r => r.status.key !== 'printed').map(r => {
     if (r.maintenance) return r;
     if (r.status.key === 'printing') {
-      const sent = Date.parse(ctx.queueFor(jobKey(r.job))?.last ?? '');
+      const sent = Date.parse((ctx.printingNow?.job === jobKey(r.job) ? ctx.printingNow.since : null) ?? ctx.queueFor(jobKey(r.job))?.last ?? '');
       const started = Number.isFinite(sent) ? Math.max(indigoStart, Math.min(minute, plantMinute(new Date(sent)))) : minute;
       const end = Math.max(started + r.minutes, minute + 5);
       return {...r, fixedStart: started, minutes: end - started};
@@ -133,13 +148,23 @@ const settle = (watch, now) => {
     [job, queueState(q) === 'printing' && job !== current ? {...q, status: 'Sent', stale: true} : q]));
 };
 
-function context({watch, printed, links, now = new Date(), info = new Map()}) {
-  const queue = settle(watch, now);
+/// The press itself (Production Pro press screen, read every minute): fresh for 5 minutes.
+export function livePress(press, now = new Date()) {
+  return press && press.ok !== false && Number.isFinite(Date.parse(press.generatedAt)) && now - Date.parse(press.generatedAt) < 5 * 60000 ? press : null;
+}
+
+function context({watch, printed, links, now = new Date(), info = new Map(), press = null}) {
+  const live = livePress(press, now);
+  // With the press's own data, Production Pro's RIP entries only say ripping / ripped; the press says what prints.
+  const queue = live ? Object.fromEntries(Object.entries(watch?.queue ?? {}).map(([job, q]) => [job, {...q, rip: true}])) : settle(watch, now);
   const rank = {printing: 0, queued: 1, completed: 2, aborted: 3};
   // Entries sent under a wrong job number count for the job a manager linked them to.
   const queueFor = job => [queue[job], ...[...links].filter(([, right]) => right === job).map(([wrong]) => queue[wrong])].filter(Boolean)
     .sort((a, b) => (rank[queueState(a)] ?? 9) - (rank[queueState(b)] ?? 9))[0] ?? null;
-  return {approvals: watch?.approvals ?? {}, queueFor, printed, info};
+  const right = job => job && (links.get(job) ?? job);
+  const printingNow = live?.printing?.job ? {...live.printing, job: right(live.printing.job)} : null;
+  const loaded = new Map((live?.loaded ?? []).filter(r => r.job).map(r => [right(r.job), r]));
+  return {approvals: watch?.approvals ?? {}, queueFor, printed, info, live, printingNow, loaded};
 }
 
 function problemsOf(watch, now) {
@@ -154,8 +179,8 @@ function problemsOf(watch, now) {
 }
 
 /// Pure: the board for one day.
-export function boardData({runs, blocks = [], watch, printed, links = new Map(), open = new Set(), day, now, hidden = () => false, info = new Map()}) {
-  const ctx = context({watch, printed, links, now, info});
+export function boardData({runs, blocks = [], watch, printed, links = new Map(), open = new Set(), day, now, hidden = () => false, info = new Map(), press = null}) {
+  const ctx = context({watch, printed, links, now, info, press});
   const indigo = runs.filter(r => !r.removed && r.press === boardPress);
   const mine = blocks.filter(b => b.press === boardPress);
   const plan = dayPlan({runs: indigo, blocks: mine, day, ctx, hidden, now});
@@ -168,7 +193,14 @@ export function boardData({runs, blocks = [], watch, printed, links = new Map(),
       done.push({id: 'printed:' + p.job, job: p.job, name: info.get(jobKey(p.job))?.name ?? '', customer: info.get(jobKey(p.job))?.customer ?? '', part: p.done.section ?? '', stock: '', finishes: '', due: null, start: null,
         status: {key: 'printed', label: 'Printed', detail: `${sheets(p.printed)} sheets`}});
   }
-  for (const [job, q] of Object.entries(settle(watch, now))) {
+  const pn = ctx.printingNow;
+  if (pn && !onPlan.has(pn.job ?? '')) {
+    onPlan.add(pn.job ?? pn.name);
+    active.push({id: 'press:' + pn.jobId, job: pn.job ?? '', name: pn.job ? info.get(pn.job)?.name || pn.name : pn.name, customer: pn.job ? info.get(pn.job)?.customer ?? '' : '',
+      part: '', stock: pn.substrate ?? '', finishes: '', due: null, start: null, minutes: null,
+      status: {key: 'printing', label: ctx.live.press?.status === 'Printing' ? 'Printing now' : 'On the press — stopped', detail: `${pn.copies ?? '?'} copies × ${pn.sheets ?? '?'} sheets · not on today’s plan`}});
+  }
+  for (const [job, q] of Object.entries(ctx.live ? {} : settle(watch, now))) {
     const right = links.get(job) ?? job;
     if (onPlan.has(right) || hidden(right) || !['printing', 'queued'].includes(queueState(q)) || now - Date.parse(q.last) > 18 * 3600000) continue;
     onPlan.add(right);
@@ -182,12 +214,13 @@ export function boardData({runs, blocks = [], watch, printed, links = new Map(),
   return {day, tomorrowDay, now: now.toISOString(), hours: dayHours(plan, day, now),
     current: active.filter(r => r.status.key === 'printing'), next: active.filter(r => r.status.key !== 'printing'),
     maintenance: plan.filter(r => r.maintenance), held: plan.filter(r => r.held), done, tomorrow, tomorrowHours: dayHours(tomorrow, tomorrowDay, now),
-    problems: problemsOf(watch, now), counts: {planned: work.length, printed: done.length, waitingApproval: active.filter(r => r.status.key === 'unapproved').length}};
+    problems: problemsOf(watch, now), counts: {planned: work.length, printed: done.length, waitingApproval: active.filter(r => r.status.key === 'unapproved').length},
+    press: ctx.live ? {status: ctx.live.press?.status ?? '', since: ctx.live.press?.since ?? null, today: ctx.live.today ?? null} : null};
 }
 
 /// Pure: Monday to Saturday of the week containing `day` (or the next week).
-export function weekData({runs, blocks = [], watch, printed, links = new Map(), open = new Set(), day, now, hidden = () => false, info = new Map(), next = false}) {
-  const ctx = context({watch, printed, links, now, info});
+export function weekData({runs, blocks = [], watch, printed, links = new Map(), open = new Set(), day, now, hidden = () => false, info = new Map(), next = false, press = null}) {
+  const ctx = context({watch, printed, links, now, info, press});
   const monday = addDays(mondayOf(day), next ? 7 : 0);
   const indigo = runs.filter(r => !r.removed && r.press === boardPress), mine = blocks.filter(b => b.press === boardPress);
   const days = [0, 1, 2, 3, 4, 5].map(n => addDays(monday, n)).map(d => {
@@ -225,7 +258,7 @@ border-radius:.45em;background:#1c222a;border-left:.55em solid var(--grey)}
 .approved{border-color:var(--amber)}.approved .label{color:var(--amber)}
 .queued{border-color:var(--blue)}.queued .label{color:#7fa8ff}
 .printing{border-color:var(--bright);background:#0f2a40}.printing .label{color:var(--bright)}
-.part{border-color:var(--teal)}.part .label{color:#3fd1c4}
+.ripping,.ripped{border-color:#5f7ea3}.ripping .label,.ripped .label{color:#a9c0de}.card.ripping,.card.ripped{border-color:#5f7ea3}.part{border-color:var(--teal)}.part .label{color:#3fd1c4}
 .printed{border-color:var(--green);opacity:.75}.printed .label{color:#5fd07f}
 .maintenance{border-color:var(--maint);background:#211d2c}.maintenance .label{color:#b9a9ec}
 .held{border-color:var(--grey);background:repeating-linear-gradient(135deg,#1c222a 0 .6em,#232a33 .6em 1.2em);opacity:.8}
@@ -239,7 +272,7 @@ border-radius:.45em;background:#1c222a;border-left:.55em solid var(--grey)}
 .col h3{margin:0 0 .3em;font-size:1em}.col .sum{color:#aab2bd;font-size:.8em;margin-bottom:.4em}.col .sum b{color:#eef1f4}
 .card{margin:.3em 0;padding:.35em .5em;border-radius:.35em;background:#1c222a;border-left:.4em solid var(--grey);font-size:.78em}
 .card .job{font-weight:700}.card .facts{color:#aab2bd}.card.unapproved{border-color:var(--grey)}.card.approved{border-color:var(--amber)}
-.card.queued{border-color:var(--blue)}.card.printing{border-color:var(--bright)}.card.part{border-color:var(--teal)}.card.printed{border-color:var(--green);opacity:.7}
+.card.queued{border-color:var(--blue)}.card.printing{border-color:var(--bright)}.card.ripping,.ripped{border-color:#5f7ea3}.ripping .label,.ripped .label{color:#a9c0de}.card.ripping,.card.ripped{border-color:#5f7ea3}.part{border-color:var(--teal)}.card.printed{border-color:var(--green);opacity:.7}
 .card.maintenance{border-color:var(--maint);background:#211d2c}.card.held{opacity:.6}
 .shift{display:flex;flex-wrap:wrap;align-items:center;gap:.4em 1.2em;margin:.6em 1em 0;padding:.5em .9em;border-radius:.45em;background:#16302a;color:#d6efe6}
 .shift form{margin:0 0 0 auto}button{font:inherit;padding:.3em .9em;border-radius:.35em;border:0;background:#3a4350;color:#eef1f4}
@@ -251,7 +284,7 @@ border-radius:.45em;background:#1c222a;border-left:.55em solid var(--grey)}
 .dots{margin:0 1em;font-size:2.4em;letter-spacing:.3em;min-height:1.3em}.err{margin:.4em 1em;color:#ff8a80;font-weight:700}`;
 
 const legend = `<div class="legend"><span style="--c:var(--grey)">Not approved</span><span style="--c:var(--amber)">Approved, not on the press</span>
-<span style="--c:var(--blue)">On the press</span><span style="--c:var(--bright)">Printing now</span><span style="--c:var(--teal)">Part printed</span>
+<span style="--c:#5f7ea3">Ripping / ripped</span><span style="--c:var(--blue)">On the press</span><span style="--c:var(--bright)">Printing now</span><span style="--c:var(--teal)">Part printed</span>
 <span style="--c:var(--green)">Printed</span><span style="--c:var(--orange)">Needs confirming</span><span style="--c:var(--maint)">Maintenance</span></div>`;
 
 const page = (title, body, refresh = 60) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -267,6 +300,13 @@ function row(r, day, big = false) {
 <div class="state"><div class="label">${esc(s.label)}</div><div class="detail">${esc(s.detail)}</div><div class="due ${r.due && r.due <= day ? 'late' : ''}">${esc(dueLabel(r.due, day))}</div></div></li>`;
 }
 
+function pressLine(p) {
+  if (!p) return '';
+  const t = p.today ?? {};
+  return `<div class="hours"><span>Press <b>${esc(p.status)}</b>${p.since ? ' since ' + esc(new Date(p.since).toLocaleTimeString('en-AU', {hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne'})) : ''}</span>
+<span>Printing today <b>${hm(Math.round(t.printingMinutes ?? 0))}</b></span><span>Stopped <b>${hm(Math.round(t.stoppedMinutes ?? 0))}</b></span></div>`;
+}
+
 function hoursLine(h) {
   return `<div class="hours"><span>Capacity <b>${hm(h.capacity)}</b></span><span>Booked <b>${hm(h.booked)}</b></span>
 ${h.maintenance ? `<span>Maintenance <b>${hm(h.maintenance)}</b></span>` : ''}<span class="${h.left < 0 ? 'over' : ''}">Left to book <b>${hm(h.left)}</b></span>
@@ -280,7 +320,7 @@ export function renderBoard(data, {weekHref = 'week', shift = null, key = '', wa
   const next = [...data.next, ...data.maintenance];
   return page('Indigo board', `<header><h1>Indigo · ${esc(dayLabel(data.day))}</h1><div class="meta">${data.counts.printed} of ${data.counts.planned} printed · updated ${esc(updated)} · <a href="${esc(weekHref)}">Week</a>${nav}</div></header>
 ${shiftPanel(shift, key)}
-${hoursLine(data.hours)}${waitingLine(waiting)}
+${hoursLine(data.hours)}${pressLine(data.press)}${waitingLine(waiting)}
 ${data.problems.map(p => `<div class="problem">${esc(p)}</div>`).join('')}
 ${data.current.length ? `<h2>Printing now</h2>${list(data.current, true)}` : ''}
 <h2>Next</h2>${next.length ? list(next) : '<p class="empty">Nothing else on today’s plan.</p>'}
@@ -341,16 +381,18 @@ ${waitingLine(waiting)}${data.problems.map(p => `<div class="problem">${esc(p)}<
 <div class="week">${data.days.map(col).join('')}</div>${legend}`);
 }
 
-function inputs(store, {watch, now, feed = null}) {
+function inputs(store, {watch, now, feed = null, press = null}) {
   // Job titles and client names from the hourly feed, for runs booked earlier and jobs sent straight to the press.
   const info = new Map((feed?.jobs ?? []).map(j => [jobKey(j.job), {name: j.name ?? '', customer: j.customer ?? ''}]));
-  return {info, runs: store.all('printPlanRun'), blocks: maintenanceRows(store), watch, links: jobLinks(store), open: openDays(store),
+  return {info, press, runs: store.all('printPlanRun'), blocks: maintenanceRows(store), watch, links: jobLinks(store), open: openDays(store),
     printed: new Map(store.all('indigoPrinted').map(r => [jobKey(r.job), r])), day: finishDay(now.toISOString()), now, hidden: hiddenJobs(store)};
 }
 /// True while the Indigo is printing (fresh watch only).
-export function pressPrinting(watch, now = new Date()) {
+export function pressPrinting(watch, now = new Date(), press = null) {
+  const live = livePress(press, now);
+  if (live) return live.press?.status === 'Printing';
   if (!watch || (now - Date.parse(watch.generatedAt)) / 60000 > watchStaleMinutes) return false;
   return printingJob(watch, now) !== null;
 }
-export const boardFor = (store, {watch, now = new Date(), feed = null}) => boardData(inputs(store, {watch, now, feed}));
-export const weekFor = (store, {watch, now = new Date(), next = false, feed = null}) => weekData({...inputs(store, {watch, now, feed}), next});
+export const boardFor = (store, {watch, now = new Date(), feed = null, press = null}) => boardData(inputs(store, {watch, now, feed, press}));
+export const weekFor = (store, {watch, now = new Date(), next = false, feed = null, press = null}) => weekData({...inputs(store, {watch, now, feed, press}), next});

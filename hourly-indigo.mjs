@@ -30,7 +30,7 @@ export function hourlySummary(store,clock=new Date()){
   const stale=clock.getTime()-Date.parse(row.asOf)>2*3600000;
   return {...row,state:stale?'Hourly source overdue':row.state};
 }
-export function planHourly(store,feed,now=new Date(),{watch=null}={}){
+export function planHourly(store,feed,now=new Date(),{watch=null,pressReading=null}={}){
   if(!feed || now-Date.parse(feed.asOf)>2*3600000 || Date.parse(feed.generatedAt)>now.getTime()+60000)return;
   store.db.exec('BEGIN IMMEDIATE');
   try{
@@ -62,6 +62,9 @@ export function planHourly(store,feed,now=new Date(),{watch=null}={}){
     // A start time that has passed doesn't count, so a run that missed its slot is replanned from now.
     const pressed=new Set(Object.entries(watch?.queue??{}).filter(([,q])=>['printing','queued'].includes(queueState(q)) &&
       now-Date.parse(q.last)<18*3600000).map(([job])=>jobKey(job)));
+    // The press's own queue: the printing job and the jobs loaded on the press count as started too.
+    const livePress=pressReading && Number.isFinite(Date.parse(pressReading.generatedAt)) && now-Date.parse(pressReading.generatedAt)<5*60000 ? pressReading : null;
+    for(const r of [livePress?.printing,...(livePress?.loaded??[])])if(r?.job)pressed.add(jobKey(r.job));
     const printedJobs=new Set(store.all('indigoPrinted').filter(r=>r.done || r.printed>0).map(r=>jobKey(r.job)));
     const started=new Set(bookings.filter(b=>pressed.has(jobKey(b.job)) || printedJobs.has(jobKey(b.job))).map(b=>b.id));
     // Jobs the printed check has marked printed leave the plan (the board lists them under Done today).

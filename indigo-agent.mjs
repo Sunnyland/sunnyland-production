@@ -1,4 +1,5 @@
 import {readHourlyFeed,planHourly,hourlySummary} from './hourly-indigo.mjs';
+import {readPress} from './indigo-watch.mjs';
 import {need, str, Fault} from './core.mjs';
 import {readJob,jobSummary,printIQReadError} from './job-documents.mjs';
 import {samePrintIQJob} from './job-tickets.mjs';
@@ -172,7 +173,7 @@ export function indigoPlanner(store,iq,{routing=()=>readRouting(),clock=()=>new 
     if(busy)return;
     busy=true;
     let feed=null;
-    try{feed=hourly();planHourly(store,feed,clock(),{watch:watch()});await evaluate(true);lastError=null;}
+    try{feed=hourly();planHourly(store,feed,clock(),{watch:watch(),pressReading:readPress()});await evaluate(true);lastError=null;}
     catch{lastError='Could not verify the Indigo plan. The agent will retry.';}
     // Approval reminders and press-queue alerts run even when printIQ is briefly unavailable.
     try{applyWatch(store,{watch:watch(),feed:feed??hourly(),now:clock()});}

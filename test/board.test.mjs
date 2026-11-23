@@ -128,3 +128,22 @@ test('rows show the client and job title, from the run or the hourly feed (also 
   const html = renderBoard(data);
   assert.match(html, /J777 <span class="client">Trentham Estate<\/span> <span class="name">Wine list<\/span>/);
 });
+
+test('with the press reading: Printing now is the job the press prints; loaded jobs are On the press; RIP entries say Ripping or Ripped', () => {
+  const press = {schema: 1, ok: true, generatedAt: new Date(+now - 30000).toISOString(), press: {status: 'Printing', since: new Date(+now - 3600000).toISOString()},
+    printing: {job: 'J064248', jobId: '114358', name: '064248b VK Mallee Text', copies: 110, sheets: 257, substrate: '80 Offset', since: new Date(+now - 20 * 60000).toISOString()},
+    loaded: [{job: 'J200', status: 'loaded'}, {job: null, name: 'Imaging Associates reorder', status: 'needs attention'}], today: {printingMinutes: 125, stoppedMinutes: 40}};
+  const w = watch({queue: {J300: {status: 'Running', last: now.toISOString()}, J400: {status: 'Completed', last: now.toISOString()},
+    J064248: {status: 'Completed', last: new Date(+now - 86400000).toISOString()}}});
+  const data = boardData({runs: [run('J200'), run('J300'), run('J400'), run('J500')], watch: w, printed: new Map(), day, now, press});
+  const s = Object.fromEntries([...data.current, ...data.next].map(r => [r.job, r.status]));
+  assert.equal(s.J064248.label, 'Printing now'); assert.match(s.J064248.detail, /110 copies × 257 sheets · not on today’s plan/);
+  assert.equal(s.J200.label, 'On the press'); assert.equal(s.J300.label, 'Ripping'); assert.equal(s.J400.label, 'Ripped');
+  assert.equal(s.J500.key, 'unapproved');
+  assert.deepEqual(data.current.map(r => r.job), ['J064248']);
+  assert.equal(data.press.status, 'Printing');
+  assert.match(renderBoard(data), /Printing today <b>2h05<\/b>/);
+  // A stale reading (over 5 minutes) falls back to the RIP entries.
+  const old = boardData({runs: [run('J300')], watch: w, printed: new Map(), day, now, press: {...press, generatedAt: new Date(+now - 600000).toISOString()}});
+  assert.equal(old.press, null);
+});

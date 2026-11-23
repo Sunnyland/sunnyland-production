@@ -25,6 +25,20 @@ const watchStaleMinutes = 30;
 const email = /^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/;
 const closedStates = new Set(['complete', 'cancelled', 'other press']);
 
+const pressPath = '/var/lib/sunnyland-production/indigo-press.json';
+/// The press's own reading (indigo_press.py, every minute): printing job, loaded jobs, today's minutes, run history.
+export function readPress(file = pressPath) {
+  let fd;
+  try {
+    fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const st = fstatSync(fd);
+    if (!st.isFile() || !(file === pressPath ? st.uid === 0 : [0, process.geteuid()].includes(st.uid)) || (st.mode & 0o027) || st.size > 4 * 1024 * 1024) return null;
+    const press = JSON.parse(readFileSync(fd, 'utf8'));
+    if (press.schema !== 1 || !Number.isFinite(Date.parse(press.generatedAt)) || typeof press.press !== 'object' || !Array.isArray(press.loaded)) return null;
+    return press;
+  } catch { return null; } finally { if (fd !== undefined) closeSync(fd); }
+}
+
 export function readWatch(file = path) {
   let fd;
   try {

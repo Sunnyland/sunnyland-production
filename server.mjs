@@ -1,6 +1,6 @@
 import {hiddenJobs,observeDirectory,directoryCutoff} from './job-visibility.mjs';
 import {indigoPlanner} from './indigo-agent.mjs';
-import {readWatch} from './indigo-watch.mjs';
+import {readPress,readWatch} from './indigo-watch.mjs';
 import {boardFor,boardLinkValid,pressPrinting,renderBoard,renderPin,renderWeek,weekFor} from './board.mjs';
 import {notPlanned,notPlannedAction} from './not-planned.mjs';
 import {planSummary,pressDays,printcrmActor,readLinkKey,today as plantToday} from './printcrm-link.mjs';
@@ -28,7 +28,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import {Store,Fault,need,barcode,stockBarcodeValue} from './core.mjs';
 import {parseAllowedPeers,peerIsAllowed} from './network.mjs';
 const root=fileURLToPath(new URL('.',import.meta.url));
-export function createServer(store,{mediaDir=join(root,'data','media'),allowedPeers=parseAllowedPeers(process.env.SUNNYLAND_ALLOWED_PEERS),iq=createJobsReader(),reviews=clientReviewSettings(),push=appleProvider(),pressStatusFile=process.env.SUNNYLAND_PRESS_STATUS_FILE,requirementsFile=requirementsPath,runIndigoAgent=false,boardWatch=readWatch,hourlyFeed=readHourlyFeed,clock=()=>new Date(),publicHost=process.env.SUNNYLAND_PUBLIC_HOST||'printcrm.sunnyland.com.au',linkKey=readLinkKey}={}){
+export function createServer(store,{mediaDir=join(root,'data','media'),allowedPeers=parseAllowedPeers(process.env.SUNNYLAND_ALLOWED_PEERS),iq=createJobsReader(),reviews=clientReviewSettings(),push=appleProvider(),pressStatusFile=process.env.SUNNYLAND_PRESS_STATUS_FILE,requirementsFile=requirementsPath,runIndigoAgent=false,boardWatch=readWatch,pressFeed=readPress,hourlyFeed=readHourlyFeed,clock=()=>new Date(),publicHost=process.env.SUNNYLAND_PUBLIC_HOST||'printcrm.sunnyland.com.au',linkKey=readLinkKey}={}){
  const press = pressStatusHook(store,{statusFile:pressStatusFile});
  const routing=()=>readRouting(requirementsFile);
  const planner=indigoPlanner(store,iq,{routing});
@@ -64,11 +64,11 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
    need(req.method==='GET'&&sub!=='/sign-out','Not found.',404);
    if(sub==='/pin')return html(200,renderPin({key}));
    const next=url.searchParams.get('next')==='1';
-   if(sub==='/week')return html(200,renderWeek(weekFor(store,{watch:boardWatch(),now,next,feed:hourlyFeed()}),{todayHref:'../'+key,otherHref:next?'week':'?next=1',waiting:notPlanned(store,hourlyFeed(),now).counts}));
+   if(sub==='/week')return html(200,renderWeek(weekFor(store,{watch:boardWatch(),now,next,feed:hourlyFeed(),press:pressFeed()}),{todayHref:'../'+key,otherHref:next?'week':'?next=1',waiting:notPlanned(store,hourlyFeed(),now).counts}));
    // Sign-in shows once anyone has shift hours (until then the board stays as it was).
    const state=store.all('staffShift').length?shiftState(store,now):null;
    const shift=state&&{...state,code:state.operator?null:boardCode(store,now).code};
-   return html(200,renderBoard(boardFor(store,{watch:boardWatch(),now,feed:hourlyFeed()}),{weekHref:key+'/week',shift,key,waiting:notPlanned(store,hourlyFeed(),now).counts}));
+   return html(200,renderBoard(boardFor(store,{watch:boardWatch(),now,feed:hourlyFeed(),press:pressFeed()}),{weekHref:key+'/week',shift,key,waiting:notPlanned(store,hourlyFeed(),now).counts}));
  }
  // Production planning page (read only): PIN sign-in, then Today, Week and Not planned. Managers change the plan in PrintCRM.
  if(path==='/plan'||path.startsWith('/plan/')){
@@ -94,10 +94,10 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
    const waiting=notPlanned(store,hourlyFeed(),now);
    const out=(href)=>` · <form method="post" action="${href}" style="display:inline"><button>Sign out ${viewer.name.replace(/[&<>"']/g,'')}</button></form>`;
    if(sub==='/week'){const next=url.searchParams.get('next')==='1';
-     return html(200,renderWeek(weekFor(store,{watch:boardWatch(),now,next,feed:hourlyFeed()}),{todayHref:'../plan',otherHref:next?'week':'?next=1',waiting:waiting.counts,
+     return html(200,renderWeek(weekFor(store,{watch:boardWatch(),now,next,feed:hourlyFeed(),press:pressFeed()}),{todayHref:'../plan',otherHref:next?'week':'?next=1',waiting:waiting.counts,
        nav:` · <a href="not-planned">Not planned (${waiting.counts.needs})</a>${out('logout')}`}));}
    if(sub==='/not-planned')return html(200,renderNotPlanned({list:waiting,user:viewer,nav:'<a href="../plan">Today</a> · <a href="week">Week</a>'}));
-   return html(200,renderBoard(boardFor(store,{watch:boardWatch(),now,feed:hourlyFeed()}),{weekHref:'plan/week',waiting:waiting.counts,
+   return html(200,renderBoard(boardFor(store,{watch:boardWatch(),now,feed:hourlyFeed(),press:pressFeed()}),{weekHref:'plan/week',waiting:waiting.counts,
      nav:` · <a href="plan/not-planned">Not planned (${waiting.counts.needs})</a>${out('plan/logout')}`}));
  }
  if(path==='/health'&&req.method==='GET')return send(200,{ok:true,version:'0.1.0'});
@@ -105,7 +105,7 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
  // PrintCRM (managers signed in there) reads and changes the plan from its server with the private link key.
  if(path==='/api/printcrm/plan'){
    const manager=printcrmActor(req,linkKey()),now=clock();
-   if(req.method==='GET')return send(200,{plan:planSummary(boardFor(store,{watch:boardWatch(),now,feed:hourlyFeed()})),
+   if(req.method==='GET')return send(200,{plan:planSummary(boardFor(store,{watch:boardWatch(),now,feed:hourlyFeed(),press:pressFeed()})),
      notPlanned:notPlanned(store,hourlyFeed(),now),days:pressDays(store,plantToday(now))});
    need(req.method==='POST','Use GET or POST.',405);
    const parts=[];let size=0;for await(const part of req){size+=part.length;need(size<=8192,'Request is too large.',413);parts.push(part);}
@@ -301,7 +301,7 @@ export function createServer(store,{mediaDir=join(root,'data','media'),allowedPe
    server.once('listening',()=>{void planner.tick();timer=setInterval(()=>void planner.tick(),60000);timer.unref();});
    server.once('close',()=>clearInterval(timer));
    // Shifts: sign out at the end of a shift, and the shift notifications.
-   let shiftTimer;const shifts=()=>{try{shiftTick(store,{now:clock(),printing:pressPrinting(boardWatch(),clock())});}catch(e){console.error('Shift check failed:',e.message);}};
+   let shiftTimer;const shifts=()=>{try{shiftTick(store,{now:clock(),printing:pressPrinting(boardWatch(),clock(),pressFeed())});}catch(e){console.error('Shift check failed:',e.message);}};
    server.once('listening',()=>{shifts();shiftTimer=setInterval(shifts,60000);shiftTimer.unref();});
    server.once('close',()=>clearInterval(shiftTimer));
  }
