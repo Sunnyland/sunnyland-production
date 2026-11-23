@@ -175,7 +175,7 @@ SIDES_PER_MINUTE = {
     "epm": 80, "enhanced productivity mode": 80,
     "monochrome": 120, "mono": 120, "black": 120, "black only": 120, "k": 120,
     "1 colour": 120, "one colour": 120, "2 colour": 120, "two colour": 120,
-    "blank": 0, "none": 0, "unprinted": 0, "no print": 0, "no printing": 0,
+    "blank": 0, "none": 0, "unprinted": 0, "no print": 0, "no printing": 0, "not printed": 0,
 }
 SETUP_MINUTES = 10
 

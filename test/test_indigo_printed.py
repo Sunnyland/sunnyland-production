@@ -77,7 +77,7 @@ class Printed(unittest.TestCase):
                 db.executemany("INSERT INTO entries VALUES (?,?)", [(q, json.dumps(e)) for q, e in rows])
             tickets = {IP: p.parse_ticket((FIX / "J064238-IP0D-ticket.jdf").read_bytes()),
                        PP: {"sheets": {"100 Offset": 1}, "waste": {}, "separations": {"Black": 2}, "requested": 1, "status": "Completed"}}
-            snapshot, memo = p.collect(NOW, state=state, share=p.Share(str(share)), ticket=tickets.__getitem__, reader=FakeReader(), cache=FakeCache, closed=set())
+            snapshot, memo = p.collect(NOW, state=state, share=p.Share(str(share)), ticket=lambda q: tickets[q] if q in tickets else {"sheets": {}, "status": "InProgress"}, reader=FakeReader(), cache=FakeCache, closed=set())
             self.assertEqual([j["job"] for j in snapshot["jobs"]], ["J064238"])
             job = snapshot["jobs"][0]
             self.assertEqual(job["printiq"]["quantity"], 1700)
@@ -91,7 +91,7 @@ class Printed(unittest.TestCase):
             # Second run within the hour: nothing read again.
             calls = FakeReader.calls
             again, _ = p.collect(NOW + timedelta(minutes=10), state=state, share=p.Share(str(share)),
-                                 ticket=lambda q: self.fail("ticket re-read"), reader=FakeReader(), cache=FakeCache, memo=memo, closed=set())
+                                 ticket=lambda q: self.fail("ticket re-read") if q in tickets else {"sheets": {}, "status": "InProgress"}, reader=FakeReader(), cache=FakeCache, memo=memo, closed=set())
             self.assertEqual(FakeReader.calls, calls)
             self.assertEqual(again["jobs"][0]["entries"][1]["imposition"]["up"], 2)
 
@@ -108,6 +108,35 @@ class Printed(unittest.TestCase):
             snap, _ = p.collect(NOW, state=state, share=p.Share(str(state)), ticket=lambda q: self.fail("read a closed job"),
                                 reader=FakeReader(), cache=FakeCache, closed=closed)
             self.assertEqual(snap["jobs"], [])
+
+    def test_running_entries_count_once_their_ticket_says_completed_and_gone_tickets_are_not_retried(self):
+        from urllib.error import HTTPError
+        ids = {k: k * 32 for k in "abcd"}
+        with tempfile.TemporaryDirectory() as d:
+            state = Path(d); (state / "Jobs").mkdir()
+            with sqlite3.connect(state / "observations.sqlite3") as db:
+                db.execute("CREATE TABLE entries(queue_id TEXT, entry_json TEXT)")
+                for k, job, status, minutes in [("a", "064238", "Running", 120), ("b", "064239", "Running", 60), ("c", "064240", "Completed", 90), ("d", "064241", "Running", 5)]:
+                    db.execute("INSERT INTO entries VALUES (?,?)", (ids[k], json.dumps({"nativeJobId": job, "status": status, "queueEntryId": ids[k],
+                               "submissionTime": (NOW - timedelta(minutes=minutes)).isoformat()})))
+            calls, later = [], False
+            def ticket(q):
+                calls.append(q)
+                if q == ids["a"]: return {"sheets": {"x": 50}, "waste": {}, "separations": {}, "requested": 1, "status": "Completed"}
+                if q == ids["b"]: return {"sheets": {"x": 20}, "waste": {}, "separations": {}, "requested": 1, "status": "InProgress"}
+                if q == ids["c"]: raise HTTPError("u", 410, "Gone", {}, None)
+                if q == ids["d"] and later: return {"sheets": {}, "status": "InProgress"}
+                self.fail("read an entry still inside its first minutes")
+            snap, memo = p.collect(NOW, state=state, share=p.Share(str(state)), ticket=ticket, reader=FakeReader(), cache=FakeCache, closed=set())
+            jobs = {j["job"]: j["entries"] for j in snap["jobs"]}
+            self.assertEqual(jobs["J064238"][0]["ticket"]["sheets"], {"x": 50})
+            self.assertNotIn("J064239", jobs, "still printing: not counted")
+            self.assertIsNone(jobs["J064240"][0]["ticket"])
+            self.assertTrue(snap["health"]["center"]["ok"], "a cleared ticket is not an outage")
+            self.assertNotIn(ids["b"], memo["tickets"])
+            calls.clear(); later = True
+            p.collect(NOW + timedelta(minutes=10), state=state, share=p.Share(str(state)), ticket=ticket, reader=FakeReader(), cache=FakeCache, memo=memo, closed=set())
+            self.assertEqual(sorted(calls), sorted([ids["b"], ids["d"]]), "only running entries are read again; the cleared one is not")
 
     def test_missing_imposition_is_retried_then_reported_missing(self):
         with tempfile.TemporaryDirectory() as d:

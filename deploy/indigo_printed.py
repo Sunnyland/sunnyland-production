@@ -21,6 +21,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.request import ProxyHandler, Request, build_opener
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -32,6 +33,7 @@ CENTER = os.environ.get("INDIGO_PRODUCTION_CENTER", "http://192.168.0.12:8080").
 SHARE = os.environ.get("INDIGO_PTJOBS_SHARE", "//PPMS/PTJobs")
 AUTH = Path("/etc/sunnyland-production/indigo-ppms.smb")
 LOOKBACK_DAYS = 10
+RUNNING_GRACE_MINUTES = 10
 # Cockpit files a job under the day it was created; look this far back from the press submission.
 FOLDER_DAYS = 45
 # A missing imposition is looked for again after this long, and given up after GIVE_UP_DAYS.
@@ -90,6 +92,11 @@ def parse_ticket(raw):
             requested = whole(attr(link, "Amount")) if requested is None else requested
     return {"sheets": sheets, "waste": waste, "separations": separations, "requested": requested,
             "status": attr(root, "Status")}
+
+
+def ticket_completed(t):
+    """A press ticket that says the run finished, with sheets on it."""
+    return bool(t) and not t.get("gone") and "complet" in str(t.get("status") or "").lower() and sum((t.get("sheets") or {}).values()) > 0
 
 
 def fetch_ticket(qid, opener=None):
@@ -312,7 +319,12 @@ def recent_entries(state, now):
     found = []
     for q, entry in rows:
         submitted = src.instant(entry.get("submissionTime"))
-        if entry.get("status") != "Completed" or not submitted or not QID.fullmatch(entry.get("queueEntryId") or q or ""):
+        # Production Pro often leaves a printed entry at "Running"; those are kept too (after a few minutes) and
+        # counted only once their press ticket says Completed (see collect).
+        status = entry.get("status")
+        if status not in ("Completed", "Running") or not submitted or not QID.fullmatch(entry.get("queueEntryId") or q or ""):
+            continue
+        if status == "Running" and now - submitted < timedelta(minutes=RUNNING_GRACE_MINUTES):
             continue
         if not timedelta(0) <= now - submitted <= timedelta(days=LOOKBACK_DAYS):
             continue
@@ -320,7 +332,7 @@ def recent_entries(state, now):
         named = (entry.get("nameRunIndex") or {}).get("jobNo") if isinstance(entry.get("nameRunIndex"), dict) else None
         job = src.jobno(native) if native not in ("000000", "J000000") else None
         found.append({"queueEntryId": entry.get("queueEntryId") or q, "job": job or src.jobno(named or ""),
-                      "fromCockpit": bool(job), "part": entry.get("jobPartId"), "submitted": submitted})
+                      "fromCockpit": bool(job), "part": entry.get("jobPartId"), "submitted": submitted, "running": status == "Running"})
     links = job_links(state)
     for e in found:
         if e["job"] in links:
@@ -367,8 +379,17 @@ def collect(now, state=src.STATE, share=None, ticket=fetch_ticket, reader=None, 
             break
         if q not in memo["tickets"]:
             try:
-                memo["tickets"][q] = ticket(q)
-            except (OSError, ValueError, ET.ParseError, TypeError, AttributeError) as error:
+                read = ticket(q)
+                # A "Running" entry's ticket is kept only once it says Completed; until then it is read again next time.
+                if not e.get("running") or ticket_completed(read):
+                    memo["tickets"][q] = read
+            except HTTPError as error:
+                if error.code in (404, 410):
+                    # Production Center no longer holds this entry (re-sent or cleared): note it once, don't retry.
+                    memo["tickets"][q] = {"gone": True, "checkedAt": now.isoformat()}
+                else:
+                    health["center"] = {"ok": False, "reason": "Production Center press tickets could not be read (HTTP " + str(error.code) + ")."}
+            except (OSError, ValueError, ET.ParseError, TypeError, AttributeError, KeyError) as error:
                 health["center"] = {"ok": False, "reason": "Production Center press tickets could not be read (" + type(error).__name__ + ")."}
         known = memo["impositions"].get(q)
         retry = known and known.get("missingSince") and now - datetime.fromisoformat(known["checkedAt"]) >= timedelta(hours=RETRY_HOURS) \
@@ -384,7 +405,9 @@ def collect(now, state=src.STATE, share=None, ticket=fetch_ticket, reader=None, 
                 else:
                     # One unreadable JDF: record it for this entry and carry on.
                     memo["impositions"][q] = {"found": None, "checkedAt": now.isoformat(), "missingSince": now.isoformat(), "error": type(error).__name__}
-    jobs = sorted({e["job"] for e in entries})
+    # Running entries count only once their ticket says Completed.
+    counted = lambda e: not e.get("running") or ticket_completed(memo["tickets"].get(e["queueEntryId"]))
+    jobs = sorted({e["job"] for e in entries if counted(e)})
     if jobs and reader is None:
         sys.path.insert(0, "/opt/sunnyland-printiq-requirements")
         import requirements_cache as cache
@@ -417,6 +440,10 @@ def collect(now, state=src.STATE, share=None, ticket=fetch_ticket, reader=None, 
         for e in (x for x in entries if x["job"] == job):
             q = e["queueEntryId"]
             t = memo["tickets"].get(q)
+            if not counted(e):
+                continue  # still printing, or never confirmed by its ticket
+            if t and t.get("gone"):
+                t = None
             imp = memo["impositions"].get(q)
             if not e["fromCockpit"]: state_ = "notCockpit"
             elif imp and imp.get("found"): state_ = "found"

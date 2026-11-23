@@ -155,6 +155,17 @@ class Speeds(unittest.TestCase):
         row["PSPrintDescription"]="150gsm Silk CMYK x 2 sides"
         self.assertIsNone(m.press_estimate(row)[0])
 
+    def test_printiq_not_printed_reverse_is_one_sided(self):
+        # J064343 as printIQ sends it: CMYK front, "Not Printed" reverse, 281 SRA3 sheets.
+        row=self.section(QPrsKeyFront=3, QPrsShortNameFront="CMYK", QPrsDescriptionFront="CMYK", QPrsExternalCodeFront=None,
+                         QPrsKeyReverse=1, QPrsShortNameReverse="Not Printed", QPrsDescriptionReverse="Not Printed", QPrsExternalCodeReverse="",
+                         PSTotalSheetsToPrint=281, PSPrintDescription=" 150gsm Gloss Art printed CMYK x 1 side \n")
+        self.assertEqual(m.side_rate(row,"Reverse"),0)
+        self.assertEqual(m.press_estimate(row),(15,None))
+        # A blank front is still refused: something has to print.
+        row.update(QPrsShortNameFront="Not Printed", QPrsDescriptionFront="Not Printed")
+        self.assertIsNone(m.press_estimate(row)[0])
+
 class Projection(unittest.TestCase):
     def test_exact_section_press_stock_finished_jobs_and_existing_press_output(self):
         class Cache:

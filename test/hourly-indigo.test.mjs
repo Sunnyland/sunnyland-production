@@ -236,3 +236,22 @@ test('a run whose time has passed is replanned unless it is really on the press;
  planHourly(s,f,new Date(+later+60000),{watch:w});
  assert.equal(s.get('printPlanRun','run-J000020').revision,rev,'same feed and same watch: nothing replanned');
 });
+
+test('a printed section leaves the plan (the other section stays), and on-press or part-printed jobs get no late email', t => {
+ const s=setup(t);
+ s.user('boss@sunnyland.test','a-long-test-password','manager','Boss');
+ const two=feedJob('J000030',{due:'2026-11-27'});two.runs.push({...two.runs[0],id:'run-J000030-cover',part:'Cover',operation:'op-cover',operationKey:'7777'});
+ planHourly(s,feedOf([two]),now);
+ assert.equal(s.all('printPlanRun').filter(r=>!r.removed).length,2);
+ s.put('indigoPrinted',{id:'J000030',job:'J000030',state:'ready',printed:100,done:{at:now.toISOString(),operationKey:'7777'}});
+ const later=new Date(+now+600000);
+ planHourly(s,{...feedOf([two]),generatedAt:later.toISOString(),asOf:later.toISOString()},later);
+ assert.equal(s.get('printPlanRun','run-J000030-cover').removed,true);
+ assert.ok(!s.get('printPlanRun','run-J000030').removed);
+ // Late but already on the press: tagged late, no email.
+ const t2=setup(t);
+ t2.put('printPlanRun',{id:'full',job:'J000900',name:'Big job',press:indigo,day:monday,minutes:430,fixedStart:null,earliestStart:null,managerOverride:true});
+ planHourly(t2,feedOf([feedJob('J000031',{due:'2026-11-23'})]),now,{watch:{generatedAt:now.toISOString(),queue:{J000031:{status:'Queued',last:now.toISOString()}}}});
+ assert.equal(t2.get('printPlanRun','run-J000031').late,true);
+ assert.equal(t2.db.prepare("SELECT count(*) n FROM outbox WHERE channel='mail'").get().n,0);
+});

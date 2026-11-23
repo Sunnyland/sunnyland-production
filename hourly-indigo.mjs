@@ -64,7 +64,14 @@ export function planHourly(store,feed,now=new Date(),{watch=null}={}){
       now-Date.parse(q.last)<18*3600000).map(([job])=>jobKey(job)));
     const printedJobs=new Set(store.all('indigoPrinted').filter(r=>r.done || r.printed>0).map(r=>jobKey(r.job)));
     const started=new Set(bookings.filter(b=>pressed.has(jobKey(b.job)) || printedJobs.has(jobKey(b.job))).map(b=>b.id));
+    // Jobs the printed check has marked printed leave the plan (the board lists them under Done today).
+    // Per section: a two-section job keeps its other section's run.
+    const printedOps=new Map(store.all('indigoPrinted').filter(r=>r.done).map(r=>[jobKey(r.job),String(r.done.operationKey??'')]));
+    const sectionPrinted=(job,op)=>printedOps.has(jobKey(job)) && (!op || !printedOps.get(jobKey(job)) || printedOps.get(jobKey(job))===String(op));
     for(const b of bookings){
+      if(sectionPrinted(b.job,b.operationKey) && b.hourly && !b.managerOverride && !b.removed && !b.maintenance){
+        changed.set(b.id,{...b,removed:true,printed:true,late:false,revision:(b.revision??0)+1});continue;
+      }
       const key=jobKey(b.job),job=reviewed.get(key), same=localOps.some(op=>jobKey(op.job)===key && String(op.printiqOperationKey)===b.operationKey && ['running','paused','completed'].includes(op.state));
       const unstarted=b.day>day || !started.has(b.id);
       if(b.hourly && !b.managerOverride && !b.removed && unstarted && !same && enabled &&
@@ -89,6 +96,7 @@ export function planHourly(store,feed,now=new Date(),{watch=null}={}){
         continue;
       }
       for(const item of job.runs){
+        if(sectionPrinted(job.job,item.operationKey))continue;
         // Finishing time from printIQ sets the latest print day; only plain values are stored on the booking.
         const {finishOps:_ops,...run}=withFinishingPlan({id:item.id,job:job.job,name:job.name,printiqId:job.printiqId,press,part:item.part,stock:item.stock,finishes:item.finishes,
           minutes:item.minutes,due:finishDay(job.due),fixedStart:null,operationKey:item.operationKey,agentOperation:item.operation,agentRelease:true,hourly:true,
@@ -125,9 +133,11 @@ export function planHourly(store,feed,now=new Date(),{watch=null}={}){
       // Best-case dispatch: print day, printIQ's finishing days, plus one spare working day.
       run.bestDispatch=addWorkdays(run.day,(Number.isInteger(run.finishingDays)?run.finishingDays:0)+1);
       run.late=!run.provisional && run.bestDispatch>run.due;
+      // On the press or part printed: it is being worked on, so no late email (the board still shows the tag).
+      if(run.late && (pressed.has(run.job) || printedJobs.has(run.job)))run.lateQuiet=true;
       if(run.late){
         review.push({id:run.id,job:run.job,reason:'Late: printing '+run.day+', best-case dispatch '+run.bestDispatch+' (due '+run.due+')'});
-        lateAlerts.push({run,job:jobsById.get(run.id)});
+        if(!run.lateQuiet)lateAlerts.push({run,job:jobsById.get(run.id)});
       }
       run.earliestStart=earliestPressStart(press,run.day,now);
       fixed.push(run);published.push({id:run.id,job:run.job,part:run.part,day:run.day,press});
