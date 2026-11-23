@@ -255,3 +255,29 @@ test('a printed section leaves the plan (the other section stays), and on-press 
  assert.equal(t2.get('printPlanRun','run-J000031').late,true);
  assert.equal(t2.db.prepare("SELECT count(*) n FROM outbox WHERE channel='mail'").get().n,0);
 });
+
+test('after 5:30pm everything left on today moves to the next working day; printed and completed jobs leave the plan', t => {
+ const s=setup(t);
+ const evening=new Date('2026-11-23T10:00:00Z'); // Monday 9pm at the plant
+ const f={...feedOf([feedJob('J000041'),feedJob('J000042'),feedJob('J000045',{state:'complete',runs:[]})]),asOf:evening.toISOString(),generatedAt:evening.toISOString()};
+ const base={press:indigo,day:monday,minutes:30,fixedStart:null,earliestStart:465,part:'Text',stock:'Silk',due:'2026-11-26'};
+ s.put('printPlanRun',{...base,id:'run-J000041',job:'J000041',hourly:true,operationKey:'1000041'});
+ s.put('printPlanRun',{...base,id:'run-J000042',job:'J000042',hourly:true,operationKey:'1000042'});
+ s.put('printPlanRun',{...base,id:'manual-43',job:'J000043',managerOverride:true,fixedStart:600});
+ s.put('printPlanRun',{...base,id:'manual-44',job:'J000044',managerOverride:true});
+ s.put('printPlanRun',{...base,id:'run-J000045',job:'J000045',hourly:true});
+ s.put('indigoPrinted',{id:'J000044',job:'J000044',state:'ready',printed:300,done:{at:evening.toISOString()}});
+ const w={generatedAt:evening.toISOString(),queue:{J000042:{status:'Running',last:new Date(+evening-3600000).toISOString()}}};
+ planHourly(s,f,evening,{watch:w});
+ const r=id=>s.get('printPlanRun',id);
+ assert.equal(r('run-J000041').day,tuesday,'unstarted: replanned from tomorrow');
+ assert.equal(r('run-J000042').day,tuesday); assert.equal(r('run-J000042').carriedFrom,monday,'ripped today: carried over');
+ assert.equal(r('manual-43').day,tuesday); assert.equal(r('manual-43').fixedStart,null); assert.equal(r('manual-43').carriedFrom,monday);
+ assert.equal(r('manual-44').removed,true,'printed: off the plan, manager booking or not');
+ assert.equal(r('run-J000045').removed,true,'complete in printIQ: off the plan');
+ // Before 5:30pm nothing on today is moved.
+ const t2=setup(t);
+ t2.put('printPlanRun',{...base,id:'manual-50',job:'J000050',managerOverride:true});
+ planHourly(t2,feedOf([]),new Date('2026-11-23T04:00:00Z'));
+ assert.equal(t2.get('printPlanRun','manual-50').day,monday);
+});

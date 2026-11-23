@@ -71,12 +71,22 @@ export function planHourly(store,feed,now=new Date(),{watch=null,pressReading=nu
     // Per section: a two-section job keeps its other section's run.
     const printedOps=new Map(store.all('indigoPrinted').filter(r=>r.done).map(r=>[jobKey(r.job),String(r.done.operationKey??'')]));
     const sectionPrinted=(job,op)=>printedOps.has(jobKey(job)) && (!op || !printedOps.get(jobKey(job)) || printedOps.get(jobKey(job))===String(op));
+    // End of the day: after 5:30pm everything left on today (and anything still on an earlier day) moves to the next
+    // working day, so the operator starts the morning on the right jobs. Rolled-over runs go first that day.
+    const rollover=minute>=17*60+30, rollTo=rollover?addWorkdays(day,1):day;
     for(const b of bookings){
-      if(sectionPrinted(b.job,b.operationKey) && b.hourly && !b.managerOverride && !b.removed && !b.maintenance){
-        changed.set(b.id,{...b,removed:true,printed:true,late:false,revision:(b.revision??0)+1});continue;
+      if(b.maintenance || b.removed){kept.push(b);continue;}
+      // Printed (that section) or complete in printIQ: off the plan, manager bookings included.
+      if(sectionPrinted(b.job,b.operationKey) || closed.has(jobKey(b.job))){
+        changed.set(b.id,{...b,removed:true,printed:sectionPrinted(b.job,b.operationKey),completed:closed.has(jobKey(b.job)),late:false,revision:(b.revision??0)+1});continue;
+      }
+      const leftover=b.day<day || (rollover && b.day===day);
+      if(leftover && (b.managerOverride || !b.hourly || started.has(b.id) || !enabled)){
+        const moved={...b,day:rollTo,fixedStart:null,earliestStart:earliestPressStart(press,rollTo,now),carriedFrom:b.carriedFrom??b.day,revision:(b.revision??0)+1};
+        changed.set(b.id,moved);kept.push(moved);continue;
       }
       const key=jobKey(b.job),job=reviewed.get(key), same=localOps.some(op=>jobKey(op.job)===key && String(op.printiqOperationKey)===b.operationKey && ['running','paused','completed'].includes(op.state));
-      const unstarted=b.day>day || !started.has(b.id);
+      const unstarted=b.day>day || !started.has(b.id) || leftover;
       if(b.hourly && !b.managerOverride && !b.removed && unstarted && !same && enabled &&
           (closed.has(key) || (job && !feed.approvalError && !feed.directoryError && !['Accepted routing unavailable','Exact printIQ job unavailable'].includes(job.state)) ||
             (!job && !feed.directoryError && !feed.approvalError)))future.set(b.id,b);

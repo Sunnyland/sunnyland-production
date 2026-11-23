@@ -102,7 +102,8 @@ export function sequencePressDay(all) {
     (normalized(a.stock)||'\uffff').localeCompare(normalized(b.stock)||'\uffff') ||
     (normalized(a.finishes)||'\uffff').localeCompare(normalized(b.finishes)||'\uffff') ||
     a.job.localeCompare(b.job) || a.id.localeCompare(b.id));
-  const auto=[...ordered.filter(r=>r.rush),...ordered.filter(r=>!r.rush)];
+  // Rush first, then work carried over from an earlier day, then the rest.
+  const auto=[...ordered.filter(r=>r.rush),...ordered.filter(r=>!r.rush&&r.carriedFrom),...ordered.filter(r=>!r.rush&&!r.carriedFrom)];
   const occupied=fixed.map(({start,end})=>({start,end}));
   const placed=[...fixed];
   for (const r of auto) {

@@ -60,7 +60,7 @@ const ofSheets = p => `${sheets(p.printed ?? 0)}${p.needed ? ' of ' + sheets(p.n
 function statusOf(run, {approvals, queueFor, printed, live, printingNow, loaded, now}) {
   if (run.maintenance) return {key: 'maintenance', label: 'Maintenance', detail: run.name ?? ''};
   const job = jobKey(run.job), p = printed.get(job), qs = queueState(queueFor(job)), approval = approvals[job];
-  const base = {confirm: p?.state === 'confirm' && !p.done, rush: Boolean(run.rush), late: run.late ? run.bestDispatch ?? true : null,
+  const base = {confirm: p?.state === 'confirm' && !p.done, rush: Boolean(run.rush), carried: run.carriedFrom ?? null, late: run.late ? run.bestDispatch ?? true : null,
     manual: Boolean(run.managerOverride || (run.fixedStart !== null && run.fixedStart !== undefined))};
   if (run.held) return {...base, key: 'held', label: 'Held', detail: run.held.reason ?? ''};
   if (p?.done) return {...base, key: 'printed', label: 'Printed', detail: p.printed ? ofSheets(p) : ''};
@@ -246,7 +246,7 @@ const dayLabel = day => new Date(day + 'T00:00:00Z').toLocaleDateString('en-AU',
 const shortDay = day => new Date(day + 'T00:00:00Z').toLocaleDateString('en-AU', {weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC'});
 const dueLabel = (due, day) => !due ? '' : due === day ? 'Due today' : due < day ? 'Overdue' : 'Due ' + shortDay(due);
 const dispatchLabel = day => new Date(day + 'T00:00:00Z').toLocaleDateString('en-AU', {weekday: 'short', day: 'numeric', timeZone: 'UTC'});
-const tags = s => (s.rush ? '<span class="tag rush">RUSH</span>' : '') + (s.late ? `<span class="tag late">LATE${typeof s.late === 'string' ? ' · dispatch ' + esc(dispatchLabel(s.late)) : ''}</span>` : '')
+const tags = s => (s.rush ? '<span class="tag rush">RUSH</span>' : '') + (s.carried ? `<span class="tag manual">FROM ${esc(dispatchLabel(s.carried).split(' ')[0].toUpperCase())}</span>` : '') + (s.late ? `<span class="tag late">LATE${typeof s.late === 'string' ? ' · dispatch ' + esc(dispatchLabel(s.late)) : ''}</span>` : '')
   + (s.manual ? '<span class="tag manual">MANUAL</span>' : '');
 
 const style = `:root{--grey:#8a8f98;--amber:#f0a020;--blue:#2f6fde;--bright:#00a2ff;--teal:#13a89e;--green:#2e9e4f;--orange:#ff7a00;--maint:#8e7cc3}
